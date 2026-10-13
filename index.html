@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>矢印ナビ - v2.9.0 GitHubリンクボタン追加版</title>
+  <title>矢印ナビ - v3.0.0</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -58,6 +58,7 @@
     .map-container { position: relative; width: 100%; margin-bottom: 8px; }
     #map { width: 100%; height: 180px; border-radius: 6px; border: 1px solid #333; background: #222; }
     
+    /* 右上ミニコンパス：赤色なし・十字デザイン */
     .north-compass {
       position: absolute; top: 8px; right: 8px; z-index: 1000;
       width: 44px; height: 44px; background: rgba(0,0,0,0.8); border: 1px solid #666;
@@ -73,11 +74,11 @@
     .mini-cross-dial::after {
       content: ''; position: absolute; left: 6px; right: 6px; top: 50%; height: 1px; background: rgba(255,255,255,0.3); transform: translateY(-50%);
     }
-    .mini-label { position: absolute; font-size: 9px; font-weight: bold; line-height: 1; }
-    .mini-label.n { top: 2px; color: #ff4757; }
-    .mini-label.e { right: 2px; color: #ccc; }
-    .mini-label.s { bottom: 2px; color: #ccc; }
-    .mini-label.w { left: 2px; color: #ccc; }
+    .mini-label { position: absolute; font-size: 9px; font-weight: bold; line-height: 1; color: #ccc; }
+    .mini-label.n { top: 2px; }
+    .mini-label.e { right: 2px; }
+    .mini-label.s { bottom: 2px; }
+    .mini-label.w { left: 2px; }
 
     .locate-btn {
       position: absolute; bottom: 6px; right: 6px; z-index: 1000;
@@ -89,6 +90,7 @@
     body.high-contrast .info-card { background: #000; border: 2px solid #ffff00; }
     #targetName { font-size: 13px; color: #4dabf7; font-weight: bold; margin-bottom: 2px; }
     
+    /* 矢印背景コンパス：赤丸撤去・十字＆四方位 */
     .arrow-wrapper {
       position: relative; display: inline-flex; justify-content: center; align-items: center; width: 150px; height: 150px; margin: 4px 0;
     }
@@ -102,15 +104,12 @@
     .compass-dial::after {
       content: ''; position: absolute; left: 8px; right: 8px; top: 50%; height: 1px; background: rgba(255,255,255,0.2); transform: translateY(-50%);
     }
-    .dial-label { position: absolute; font-size: 11px; font-weight: bold; }
-    .dial-label.n { top: 2px; left: 50%; transform: translateX(-50%); color: #ff4757; }
-    .dial-label.e { right: 4px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.5); }
-    .dial-label.s { bottom: 2px; left: 50%; transform: translateX(-50%); color: rgba(255,255,255,0.5); }
-    .dial-label.w { left: 4px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.5); }
+    .dial-label { position: absolute; font-size: 11px; font-weight: bold; color: rgba(255,255,255,0.5); }
+    .dial-label.n { top: 2px; left: 50%; transform: translateX(-50%); }
+    .dial-label.e { right: 4px; top: 50%; transform: translateY(-50%); }
+    .dial-label.s { bottom: 2px; left: 50%; transform: translateX(-50%); }
+    .dial-label.w { left: 4px; top: 50%; transform: translateY(-50%); }
 
-    .target-dot {
-      position: absolute; width: 8px; height: 8px; background: #ff4757; border-radius: 50%; top: 4px; left: 66px;
-    }
     #arrow {
       font-size: 100px; line-height: 1; transition: transform 0.1s cubic-bezier(0.25, 0.1, 0.25, 1), color 0.3s; display: inline-block; color: #007bff; z-index: 2;
     }
@@ -154,7 +153,7 @@
 
 <div class="container" id="mainApp">
   <div class="header-bar" id="headerArea">
-    <span class="version-tag">v2.9.0</span>
+    <span class="version-tag">v3.0.0</span>
     <h2>矢印ナビ</h2>
     <div>
       <button class="help-btn" onclick="openGithubPage()" style="background:#24292e; border:1px solid #444;">🔗 GitHub</button>
@@ -201,7 +200,6 @@
         <span class="dial-label e">E</span>
         <span class="dial-label s">S</span>
         <span class="dial-label w">W</span>
-        <div class="target-dot"></div>
       </div>
       <div id="arrow">⬆</div>
     </div>
@@ -260,8 +258,8 @@
 <!-- ヘルプ モーダル -->
 <div id="helpModal" class="modal-overlay">
   <div class="modal-content">
-    <div class="modal-header"><span>📖 アプリ機能一覧（v2.9.0）</span><button class="close-btn" onclick="closeModal()">✕</button></div>
-    <p>GitHubリポジトリ（https://github.com/paserinn/map）を開くボタンを追加したバージョンです。</p>
+    <div class="modal-header"><span>📖 アプリ機能一覧（v3.0.0）</span><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <p>赤丸表示を排除したシンプルデザイン版です。</p>
   </div>
 </div>
 
