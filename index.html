@@ -3,9 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>矢印ナビ - PWA＆音声通知対応</title>
+  <title>矢印ナビ - 10大拡張機能搭載版</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- 紙ふぶきエフェクト用ライブラリ -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -16,65 +18,93 @@
       min-height: 100vh;
     }
     .container {
-      width: 100%; max-width: 480px; padding: 15px;
+      width: 100%; max-width: 480px; padding: 12px;
       display: flex; flex-direction: column; align-items: center;
       position: relative;
     }
     .header-bar {
-      width: 100%; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;
+      width: 100%; display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;
     }
     .version-tag {
       font-size: 11px; color: #007bff; background: #1a2735; padding: 3px 8px; border-radius: 12px; border: 1px solid #0056b3; font-weight: bold;
     }
-    h2 { margin: 0; font-size: 20px; }
+    .help-btn {
+      font-size: 11px; background: #333; color: #fff; border: 1px solid #555; padding: 4px 8px; border-radius: 12px; cursor: pointer;
+    }
+    h2 { margin: 0; font-size: 18px; }
     .search-box {
-      width: 100%; display: flex; gap: 8px; margin-bottom: 10px;
+      width: 100%; display: flex; gap: 6px; margin-bottom: 8px;
     }
     input[type="text"] {
-      flex: 1; padding: 10px; border-radius: 6px; border: 1px solid #444; background: #222; color: #fff; font-size: 14px;
+      flex: 1; padding: 8px; border-radius: 6px; border: 1px solid #444; background: #222; color: #fff; font-size: 13px;
     }
     button {
-      padding: 10px 16px; background-color: #007bff; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;
+      padding: 8px 12px; background-color: #007bff; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;
     }
-    .map-container { position: relative; width: 100%; margin-bottom: 15px; }
-    #map { width: 100%; height: 200px; border-radius: 8px; border: 1px solid #333; }
+    .fav-bar {
+      width: 100%; display: flex; gap: 6px; overflow-x: auto; margin-bottom: 8px; padding-bottom: 4px;
+    }
+    .fav-chip {
+      background: #2a2a2a; border: 1px solid #444; padding: 4px 8px; border-radius: 15px; font-size: 11px; color: #4dabf7; white-space: nowrap; cursor: pointer;
+    }
+    .map-container { position: relative; width: 100%; margin-bottom: 10px; }
+    #map { width: 100%; height: 180px; border-radius: 8px; border: 1px solid #333; }
     .locate-btn {
-      position: absolute; bottom: 10px; right: 10px; z-index: 1000;
-      background: #222; color: #fff; border: 1px solid #555; padding: 8px 14px; border-radius: 20px; font-size: 12px; font-weight: bold; box-shadow: 0 2px 6px rgba(0,0,0,0.6);
+      position: absolute; bottom: 8px; right: 8px; z-index: 1000;
+      background: #222; color: #fff; border: 1px solid #555; padding: 6px 12px; border-radius: 20px; font-size: 11px; font-weight: bold;
     }
     .info-card {
-      background: #1e1e1e; width: 100%; padding: 15px; border-radius: 8px; text-align: center; margin-bottom: 10px;
+      background: #1e1e1e; width: 100%; padding: 12px; border-radius: 8px; text-align: center; margin-bottom: 8px;
     }
-    #targetName { font-size: 15px; color: #4dabf7; font-weight: bold; margin-bottom: 5px; }
+    #targetName { font-size: 14px; color: #4dabf7; font-weight: bold; margin-bottom: 4px; }
     #arrow {
-      font-size: 130px; line-height: 1; margin: 10px 0; transition: transform 0.1s linear, color 0.3s; display: inline-block; color: #007bff;
+      font-size: 110px; line-height: 1; margin: 6px 0; transition: transform 0.1s linear; display: inline-block; color: #007bff;
     }
-    #distance { font-size: 36px; font-weight: bold; color: #20c997; }
-    #etaDetails { font-size: 13px; color: #aaa; margin-top: -5px; margin-bottom: 10px; }
-    .btn-group {
-      display: flex; gap: 6px; margin-top: 10px; width: 100%;
+    #distance { font-size: 32px; font-weight: bold; color: #20c997; }
+    #etaDetails { font-size: 12px; color: #aaa; margin-bottom: 8px; }
+    .btn-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 8px; width: 100%;
     }
     .sub-btn {
-      flex: 1; padding: 8px 4px; font-size: 11px; background: #333; border: 1px solid #555; border-radius: 6px; color: #fff;
+      padding: 6px 2px; font-size: 10px; background: #2c2c2c; border: 1px solid #444; border-radius: 4px; color: #ddd;
     }
     .start-btn {
-      width: 100%; margin-top: 10px; padding: 14px; background-color: #28a745; font-size: 16px; border-radius: 8px;
+      width: 100%; margin-top: 8px; padding: 12px; background-color: #28a745; font-size: 15px; border-radius: 6px;
     }
-    #status { font-size: 12px; color: #888; margin-top: 10px; }
+    #navTimer { font-size: 11px; color: #20c997; margin-top: 4px; }
+    #status { font-size: 11px; color: #888; margin-top: 6px; }
+
+    /* モーダル表示スタイル */
+    .modal-overlay {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.85); z-index: 2000; justify-content: center; align-items: center; padding: 15px;
+    }
+    .modal-content {
+      background: #222; border-radius: 12px; padding: 15px; max-width: 400px; width: 100%; max-height: 85vh; overflow-y: auto; color: #ddd; font-size: 12px; line-height: 1.5;
+    }
+    .modal-header { font-size: 16px; font-weight: bold; color: #fff; margin-bottom: 10px; border-bottom: 1px solid #444; padding-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+    .close-btn { background: #d9534f; border: none; padding: 4px 8px; border-radius: 4px; color: white; cursor: pointer; font-size: 11px; }
   </style>
 </head>
 <body>
 
 <div class="container">
   <div class="header-bar">
-    <span class="version-tag">v1.3.0</span>
+    <span class="version-tag">v1.6.0</span>
     <h2>矢印ナビ</h2>
-    <span style="width: 45px;"></span>
+    <div>
+      <button class="help-btn" onclick="openSosModal()" style="background:#d9534f; border:none;">🚨 SOS</button>
+      <button class="help-btn" onclick="openModal()">❓ 使い方</button>
+    </div>
   </div>
 
   <div class="search-box">
     <input type="text" id="keyword" placeholder="場所や住所を検索（例: 立川駅）">
     <button onclick="searchLocation()">検索</button>
+  </div>
+
+  <div class="fav-bar" id="favBar">
+    <span style="font-size:11px; color:#666; line-height:22px;">保存:</span>
   </div>
 
   <div class="map-container">
@@ -88,16 +118,57 @@
     <div id="etaDetails">徒歩 約 -- 分（約 -- 歩）</div>
     <div id="arrow">⬆</div>
     
-    <div class="btn-group">
-      <button class="sub-btn" onclick="toggleArrowColor()">🎨 色変更</button>
-      <button class="sub-btn" onclick="toggleSpeech()">🔊 音声案内: <span id="speechStatus">ON</span></button>
+    <!-- 10大拡張操作ボタン群 -->
+    <div class="btn-grid">
+      <button class="sub-btn" onclick="changeTransportMode()">🏃 <span id="modeText">徒歩</span></button>
+      <button class="sub-btn" onclick="adjustCompass(-10)">↺ 角度-10°</button>
+      <button class="sub-btn" onclick="adjustCompass(10)">↻ 角度+10°</button>
+      <button class="sub-btn" onclick="toggleMapTile()">🗺 地図切替</button>
+      <button class="sub-btn" onclick="saveToFavorites()">⭐ 保存</button>
+      <button class="sub-btn" onclick="clearFavorites()">🗑 履歴消去</button>
+      <button class="sub-btn" onclick="toggleSpeech()">🔊 音声:<span id="speechStatus">ON</span></button>
       <button class="sub-btn" onclick="shareLocation()">🔗 共有</button>
     </div>
 
     <button id="startBtn" class="start-btn" onclick="startNavigation()">
       🚀 案内開始
     </button>
+    <div id="navTimer">経過時間: --:--</div>
     <div id="status">目的地を選択してから「案内開始」を押してください</div>
+  </div>
+</div>
+
+<!-- SOS モーダル画面 -->
+<div id="sosModal" class="modal-overlay">
+  <div class="modal-content" style="border: 2px solid #d9534f;">
+    <div class="modal-header" style="color: #ff6b6b;">
+      <span>🚨 現在地・緊急SOS</span>
+      <button class="close-btn" onclick="closeSosModal()">✕ 閉じる</button>
+    </div>
+    <p>現在地の座標データです。タップしてコピーできます：</p>
+    <div id="sosCoords" style="background:#111; padding:10px; font-family:monospace; color:#20c997; border-radius:4px; font-size:14px; text-align:center; margin:10px 0;">取得中...</div>
+    <button onclick="copySosCoords()" style="width:100%; background:#007bff; margin-bottom:8px;">現在地テキストをコピー</button>
+    <p style="font-size:11px; color:#aaa;">※通報時やLINE等での位置共有にご利用ください。</p>
+  </div>
+</div>
+
+<!-- 使い方 モーダル画面 -->
+<div id="helpModal" class="modal-overlay">
+  <div class="modal-content">
+    <div class="modal-header">
+      <span>📖 10大追加機能の使い方</span>
+      <button class="close-btn" onclick="closeModal()">✕ 閉じる</button>
+    </div>
+    <ul style="padding-left: 15px; line-height: 1.6;">
+      <li><strong>🏃 移動モード切替:</strong> 徒歩 / ランニング / 自転車での速度換算を切り替えます。</li>
+      <li><strong>↺ ↻ 角度微調整:</strong> 磁力ノイズで矢印が少しズレている場合に手動で10度ずつ補正します。</li>
+      <li><strong>🗺 地図切替:</strong> 標準マップとダークテーママップを切り替えます。</li>
+      <li><strong>🎉 クラッカー演出:</strong> 到着時に紙ふぶきアニメーションが舞います。</li>
+      <li><strong>📍 案内点線:</strong> 地図上に現在地から目的地までの赤い点線ラインを描画します。</li>
+      <li><strong>⏱️ 経過時間:</strong> ナビ開始からの経過時間を自動計測します。</li>
+      <li><strong>🚨 SOS機能:</strong> 右上SOSボタンで現在地の緯度経度を即座にコピー可能です。</li>
+    </ul>
+    <p style="text-align: center; color: #888; font-size: 11px; margin-top: 10px;">v1.6.0 (10大機能追加完了)</p>
   </div>
 </div>
 
@@ -105,32 +176,112 @@
   let targetLat = null, targetLng = null;
   let currentLat = null, currentLng = null;
   let prevLat = null, prevLng = null;
-  let rawHeading = 0;
-  let smoothedHeading = 0;
-  let autoCompassOffset = 0;
-  let map, targetMarker, currentMarker;
-  let isNavigating = false;
-  let enableSpeech = true;
-  let announced50m = false;
-  let announced100m = false;
-  let hasVibratedForArrival = false;
+  let rawHeading = 0, smoothedHeading = 0;
+  let manualOffset = 0, autoCompassOffset = 0;
+  let map, targetMarker, currentMarker, polyline;
+  let isNavigating = false, enableSpeech = true;
+  let announced50m = false, announced100m = false, hasVibratedForArrival = false;
+  let navStartTime = null, timerInterval = null;
 
   const JAPAN_MAGNETIC_DECLINATION = 7.5;
-  const ARROW_COLORS = ['#007bff', '#20c997', '#ffc107', '#e83e8c', '#ffffff'];
-  let colorIndex = 0;
+  const MODES = [
+    { name: '徒歩', speedMin: 67, stepLen: 0.7 },
+    { name: 'ラン', speedMin: 150, stepLen: 0.9 },
+    { name: 'チャリ', speedMin: 250, stepLen: 2.0 }
+  ];
+  let modeIdx = 0;
+
+  const TILES = {
+    standard: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+  };
+  let currentTileLayer;
 
   window.onload = function() {
     map = L.map('map').setView([35.6995, 139.4137], 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap'
-    }).addTo(map);
+    currentTileLayer = L.tileLayer(TILES.standard, { attribution: '© OpenStreetMap' }).addTo(map);
 
     map.on('click', function(e) {
       setTarget(e.latlng.lat, e.latlng.lng, 'タップした位置');
     });
 
+    renderFavorites();
     fetchInitialLocationFast();
   };
+
+  function openModal() { document.getElementById('helpModal').style.display = 'flex'; }
+  function closeModal() { document.getElementById('helpModal').style.display = 'none'; }
+  function openSosModal() {
+    document.getElementById('sosModal').style.display = 'flex';
+    if (currentLat !== null) {
+      document.getElementById('sosCoords').innerText = `緯度: ${currentLat.toFixed(6)}\n経度: ${currentLng.toFixed(6)}`;
+    }
+  }
+  function closeSosModal() { document.getElementById('sosModal').style.display = 'none'; }
+  function copySosCoords() {
+    const text = document.getElementById('sosCoords').innerText;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      alert('現在地座標をコピーしました。');
+    }
+  }
+
+  function changeTransportMode() {
+    modeIdx = (modeIdx + 1) % MODES.length;
+    document.getElementById('modeText').innerText = MODES[modeIdx].name;
+    updateUI();
+  }
+
+  function adjustCompass(deg) {
+    manualOffset += deg;
+    updateUI();
+  }
+
+  function toggleMapTile() {
+    map.removeLayer(currentTileLayer);
+    if (currentTileLayer._url === TILES.standard) {
+      currentTileLayer = L.tileLayer(TILES.dark, { attribution: '© CartoDB' }).addTo(map);
+    } else {
+      currentTileLayer = L.tileLayer(TILES.standard, { attribution: '© OpenStreetMap' }).addTo(map);
+    }
+  }
+
+  function saveToFavorites() {
+    if (targetLat === null || targetLng === null) {
+      alert('先に目的地をセットしてください。');
+      return;
+    }
+    const label = prompt('登録名を入力:', document.getElementById('targetName').innerText.replace('目的地: ', ''));
+    if (!label) return;
+
+    let favs = JSON.parse(localStorage.getItem('navi_favs') || '[]');
+    favs.push({ name: label, lat: targetLat, lng: targetLng });
+    localStorage.setItem('navi_favs', JSON.stringify(favs));
+    renderFavorites();
+  }
+
+  function clearFavorites() {
+    if (confirm('保存した目的地履歴を消去しますか？')) {
+      localStorage.removeItem('navi_favs');
+      renderFavorites();
+    }
+  }
+
+  function renderFavorites() {
+    const favBar = document.getElementById('favBar');
+    let favs = JSON.parse(localStorage.getItem('navi_favs') || '[]');
+    favBar.innerHTML = '<span style="font-size:11px; color:#666; line-height:22px;">保存:</span>';
+    favs.forEach(f => {
+      const chip = document.createElement('span');
+      chip.className = 'fav-chip';
+      chip.innerText = f.name;
+      chip.onclick = () => {
+        map.flyTo([f.lat, f.lng], 15);
+        setTarget(f.lat, f.lng, f.name);
+      };
+      favBar.appendChild(chip);
+    });
+  }
 
   function speakText(text) {
     if (!enableSpeech || !('speechSynthesis' in window)) return;
@@ -153,7 +304,7 @@
     const url = `https://maps.google.com/?q=${currentLat},${currentLng}`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(url);
-      alert('現在地のGoogle Mapsリンクをコピーしました。LINE等に送信できます。');
+      alert('Google Mapsリンクをコピーしました。');
     }
   }
 
@@ -174,7 +325,19 @@
     document.getElementById('targetName').innerText = `目的地: ${label}`;
     if (targetMarker) map.removeLayer(targetMarker);
     targetMarker = L.marker([lat, lng]).addTo(map).bindPopup(label).openPopup();
+    
+    updatePolyline();
     updateUI();
+  }
+
+  function updatePolyline() {
+    if (currentLat !== null && currentLng !== null && targetLat !== null && targetLng !== null) {
+      if (polyline) map.removeLayer(polyline);
+      polyline = L.polyline([
+        [currentLat, currentLng],
+        [targetLat, targetLng]
+      ], { color: '#ff4757', weight: 3, dashArray: '5, 8' }).addTo(map);
+    }
   }
 
   function searchLocation() {
@@ -189,8 +352,6 @@
           const lon = parseFloat(data[0].lon);
           map.flyTo([lat, lon], 15, { duration: 0.4 });
           setTarget(lat, lon, data[0].display_name.split(',')[0]);
-        } else {
-          alert('見つかりませんでした。別のキーワードで試してください。');
         }
       });
   }
@@ -208,7 +369,7 @@
         currentLng = pos.coords.longitude;
         map.flyTo([currentLat, currentLng], 16, { duration: 0.3 });
         updateCurrentMarkerOnMap();
-        document.getElementById('status').innerText = isNavigating ? 'GPS・コンパス稼働中' : '現在地へ移動しました';
+        updatePolyline();
         updateUI();
       }, null, { enableHighAccuracy: true, maximumAge: 3000, timeout: 4000 });
     }
@@ -220,11 +381,6 @@
     currentMarker = L.circleMarker([currentLat, currentLng], {
       color: '#007bff', fillColor: '#007bff', fillOpacity: 0.8, radius: 8
     }).addTo(map);
-  }
-
-  function toggleArrowColor() {
-    colorIndex = (colorIndex + 1) % ARROW_COLORS.length;
-    document.getElementById('arrow').style.color = ARROW_COLORS[colorIndex];
   }
 
   function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -253,28 +409,28 @@
       ? (dist / 1000).toFixed(2) + ' km' 
       : Math.round(dist) + ' m';
 
-    // 歩数・想定時間計算（分速80m換算）
-    const steps = Math.round(dist / 0.7);
-    const walkMinutes = Math.max(1, Math.round(dist / 67));
-    document.getElementById('etaDetails').innerText = `徒歩 約 ${walkMinutes} 分（約 ${steps.toLocaleString()} 歩）`;
+    const mode = MODES[modeIdx];
+    const steps = Math.round(dist / mode.stepLen);
+    const estMinutes = Math.max(1, Math.round(dist / mode.speedMin));
+    document.getElementById('etaDetails').innerText = `${mode.name} 約 ${estMinutes} 分（約 ${steps.toLocaleString()} 歩）`;
 
-    // 音声告知＆到達判定
     if (isNavigating) {
       if (dist <= 100 && dist > 50 && !announced100m) {
-        speakText('目的地まで、およそ100メートルです');
+        speakText('目的地までおよそ100メートルです');
         announced100m = true;
       } else if (dist <= 50 && dist > 10 && !announced50m) {
-        speakText('まもなく、目的地付近です');
+        speakText('まもなく目的地付近です');
         announced50m = true;
       } else if (dist <= 10 && !hasVibratedForArrival) {
         if ('vibrate' in navigator) navigator.vibrate([200, 100, 200, 100, 400]);
-        speakText('目的地付近に到着しました。ナビを完了します');
+        speakText('目的地付近に到着しました');
+        confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } }); // クラッカー紙ふぶき
         hasVibratedForArrival = true;
         document.getElementById('status').innerText = '🎉 目的地付近に到着しました！';
       }
     }
 
-    let finalHeading = (smoothedHeading + autoCompassOffset) % 360;
+    let finalHeading = (smoothedHeading + autoCompassOffset + manualOffset) % 360;
     const targetBearing = calculateBearing(currentLat, currentLng, targetLat, targetLng);
     let arrowRotation = targetBearing - finalHeading;
 
@@ -288,6 +444,10 @@
     }
 
     isNavigating = true;
+    navStartTime = new Date();
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = setInterval(updateTimer, 1000);
+
     speakText('ナビゲーションを開始します');
     document.getElementById('startBtn').innerText = 'ナビゲーション中...';
     document.getElementById('startBtn').style.backgroundColor = '#17a2b8';
@@ -305,11 +465,9 @@
           prevLng = currentLng;
           currentLat = pos.coords.latitude;
           currentLng = pos.coords.longitude;
-          if (!hasVibratedForArrival) {
-            document.getElementById('status').innerText = 'GPS・コンパス稼働中';
-          }
 
           updateCurrentMarkerOnMap();
+          updatePolyline();
 
           if (prevLat !== null && prevLng !== null) {
             const moveDist = calculateDistance(prevLat, prevLng, currentLat, currentLng);
@@ -326,6 +484,15 @@
         { enableHighAccuracy: true, maximumAge: 1000, timeout: 3000 }
       );
     }
+  }
+
+  function updateTimer() {
+    if (!navStartTime) return;
+    const now = new Date();
+    const diffSec = Math.floor((now - navStartTime) / 1000);
+    const m = String(Math.floor(diffSec / 60)).padStart(2, '0');
+    const s = String(diffSec % 60).padStart(2, '0');
+    document.getElementById('navTimer').innerText = `経過時間: ${m}:${s}`;
   }
 
   function handleGalaxyOrientation(e) {
