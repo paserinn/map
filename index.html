@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>矢印ナビ - v2.8.0 十字東西南北コンパス版</title>
+  <title>矢印ナビ - v2.9.0 GitHubリンクボタン追加版</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -58,7 +58,6 @@
     .map-container { position: relative; width: 100%; margin-bottom: 8px; }
     #map { width: 100%; height: 180px; border-radius: 6px; border: 1px solid #333; background: #222; }
     
-    /* ★右上ミニコンパス：十字（十）東西南北デザイン★ */
     .north-compass {
       position: absolute; top: 8px; right: 8px; z-index: 1000;
       width: 44px; height: 44px; background: rgba(0,0,0,0.8); border: 1px solid #666;
@@ -90,7 +89,6 @@
     body.high-contrast .info-card { background: #000; border: 2px solid #ffff00; }
     #targetName { font-size: 13px; color: #4dabf7; font-weight: bold; margin-bottom: 2px; }
     
-    /* ★矢印背景コンパス：十字クロス＆四方位表記★ */
     .arrow-wrapper {
       position: relative; display: inline-flex; justify-content: center; align-items: center; width: 150px; height: 150px; margin: 4px 0;
     }
@@ -156,9 +154,10 @@
 
 <div class="container" id="mainApp">
   <div class="header-bar" id="headerArea">
-    <span class="version-tag">v2.8.0</span>
+    <span class="version-tag">v2.9.0</span>
     <h2>矢印ナビ</h2>
     <div>
+      <button class="help-btn" onclick="openGithubPage()" style="background:#24292e; border:1px solid #444;">🔗 GitHub</button>
       <button class="help-btn" onclick="openSosModal()" style="background:#d9534f; border:none;">🚨 SOS</button>
       <button class="help-btn" onclick="openConfigModal()">⚙ 設定</button>
       <button class="help-btn" onclick="openModal()">❓ ヘルプ</button>
@@ -241,6 +240,7 @@
         <option value="50">50m</option>
       </select>
     </label><br><br>
+    <button onclick="openGithubPage()" style="width:100%; margin-bottom:6px; background:#24292e; color:#fff; border:1px solid #444;">🔗 GitHubリポジトリを開く</button>
     <button onclick="toggleContrast()" style="width:100%; margin-bottom:6px;">🌙 夜間・高コントラスト切替</button>
     <button onclick="exportFavorites()" style="width:100%; margin-bottom:6px;">📥 お気に入りバックアップ</button>
     <button onclick="importFavorites()" style="width:100%; margin-bottom:6px;">📤 お気に入り復元</button>
@@ -260,8 +260,8 @@
 <!-- ヘルプ モーダル -->
 <div id="helpModal" class="modal-overlay">
   <div class="modal-content">
-    <div class="modal-header"><span>📖 アプリ機能一覧（v2.8.0）</span><button class="close-btn" onclick="closeModal()">✕</button></div>
-    <p>十字の東西南北コンパス表示に対応したバージョンです。</p>
+    <div class="modal-header"><span>📖 アプリ機能一覧（v2.9.0）</span><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <p>GitHubリポジトリ（https://github.com/paserinn/map）を開くボタンを追加したバージョンです。</p>
   </div>
 </div>
 
@@ -298,6 +298,10 @@
     dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
   };
   let currentTileLayer = null;
+
+  function openGithubPage() {
+    window.open('https://github.com/paserinn/map', '_blank');
+  }
 
   function playBeep(freq = 880, type = 'sine', duration = 0.15) {
     try {
