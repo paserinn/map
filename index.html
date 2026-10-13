@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>矢印ナビ - Galaxy S25最適化版</title>
+  <title>矢印ナビ - 高速＆バージョン表示版</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
@@ -18,8 +18,25 @@
     .container {
       width: 100%; max-width: 480px; padding: 15px;
       display: flex; flex-direction: column; align-items: center;
+      position: relative;
     }
-    h2 { margin: 10px 0; font-size: 20px; }
+    .header-bar {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .version-tag {
+      font-size: 11px;
+      color: #007bff;
+      background: #1a2735;
+      padding: 3px 8px;
+      border-radius: 12px;
+      border: 1px solid #0056b3;
+      font-weight: bold;
+    }
+    h2 { margin: 0; font-size: 20px; }
     .search-box {
       width: 100%; display: flex; gap: 8px; margin-bottom: 10px;
     }
@@ -46,7 +63,7 @@
     #targetName { font-size: 15px; color: #4dabf7; font-weight: bold; margin-bottom: 5px; }
     #arrow {
       font-size: 130px; line-height: 1; margin: 10px 0;
-      transition: transform 0.15s ease-out; display: inline-block;
+      transition: transform 0.1s linear; display: inline-block;
     }
     #distance { font-size: 36px; font-weight: bold; color: #20c997; }
     .start-btn {
@@ -59,7 +76,12 @@
 <body>
 
 <div class="container">
-  <h2>矢印ナビ</h2>
+  <!-- ヘッダーエリア（左上にバージョン表記） -->
+  <div class="header-bar">
+    <span class="version-tag">v1.1.0</span>
+    <h2>矢印ナビ</h2>
+    <span style="width: 45px;"></span> <!-- レイアウト調整用スペース -->
+  </div>
 
   <!-- 検索エリア -->
   <div class="search-box">
@@ -96,7 +118,7 @@
   let map, targetMarker, currentMarker;
   let isNavigating = false;
 
-  const JAPAN_MAGNETIC_DECLINATION = 7.5; // 日本国内の偏角補正
+  const JAPAN_MAGNETIC_DECLINATION = 7.5;
 
   window.onload = function() {
     map = L.map('map').setView([35.6995, 139.4137], 13);
@@ -108,16 +130,16 @@
       setTarget(e.latlng.lat, e.latlng.lng, 'タップした位置');
     });
 
-    fetchInitialLocation();
+    fetchInitialLocationFast();
   };
 
-  function fetchInitialLocation() {
+  function fetchInitialLocationFast() {
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition((pos) => {
         currentLat = pos.coords.latitude;
         currentLng = pos.coords.longitude;
         updateCurrentMarkerOnMap();
-      }, null, { enableHighAccuracy: true });
+      }, null, { enableHighAccuracy: true, maximumAge: 10000, timeout: 3000 });
     }
   }
 
@@ -139,7 +161,7 @@
         if (data && data.length > 0) {
           const lat = parseFloat(data[0].lat);
           const lon = parseFloat(data[0].lon);
-          map.flyTo([lat, lon], 15);
+          map.flyTo([lat, lon], 15, { duration: 0.4 });
           setTarget(lat, lon, data[0].display_name.split(',')[0]);
         } else {
           alert('見つかりませんでした。別のキーワードで試してください。');
@@ -148,20 +170,21 @@
   }
 
   function moveToCurrentLocation() {
+    if (currentLat !== null && currentLng !== null) {
+      map.flyTo([currentLat, currentLng], 16, { duration: 0.3 });
+      updateCurrentMarkerOnMap();
+      updateUI();
+    }
+
     if ('geolocation' in navigator) {
-      document.getElementById('status').innerText = '現在地を取得中...';
       navigator.geolocation.getCurrentPosition((pos) => {
         currentLat = pos.coords.latitude;
         currentLng = pos.coords.longitude;
-        
-        map.flyTo([currentLat, currentLng], 16);
+        map.flyTo([currentLat, currentLng], 16, { duration: 0.3 });
         updateCurrentMarkerOnMap();
-        
         document.getElementById('status').innerText = isNavigating ? 'GPS・コンパス稼働中' : '現在地へ移動しました';
         updateUI();
-      }, (err) => {
-        alert('現在地を取得できませんでした。位置情報の設定を確認してください。');
-      }, { enableHighAccuracy: true, timeout: 5000 });
+      }, null, { enableHighAccuracy: true, maximumAge: 3000, timeout: 4000 });
     }
   }
 
@@ -216,7 +239,6 @@
     document.getElementById('startBtn').innerText = 'ナビゲーション中...';
     document.getElementById('startBtn').style.backgroundColor = '#17a2b8';
 
-    // Galaxy（Android Chrome）向けコンパスリスナー登録
     if ('ondeviceorientationabsolute' in window) {
       window.addEventListener('deviceorientationabsolute', handleGalaxyOrientation, true);
     } else {
@@ -246,17 +268,15 @@
           updateUI();
         },
         (err) => { document.getElementById('status').innerText = 'GPSエラー: ' + err.message; },
-        { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+        { enableHighAccuracy: true, maximumAge: 1000, timeout: 3000 }
       );
     }
   }
 
-  // Galaxy S25最適化コンパスリスナー
   function handleGalaxyOrientation(e) {
     let heading = null;
 
     if (e.alpha !== null && e.alpha !== undefined) {
-      // Galaxyで正しく絶対北を取得する算出処理
       heading = 360 - e.alpha;
     }
 
@@ -269,7 +289,7 @@
       let diff = rawHeading - smoothedHeading;
       if (diff > 180) diff -= 360;
       if (diff < -180) diff += 360;
-      smoothedHeading = (smoothedHeading + diff * 0.25) % 360;
+      smoothedHeading = (smoothedHeading + diff * 0.3) % 360;
       if (smoothedHeading < 0) smoothedHeading += 360;
 
       updateUI();
