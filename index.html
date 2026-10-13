@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>矢印ナビ - v1.9.0 (20大追加機能版)</title>
+  <title>矢印ナビ - v2.1.0 超進化学習版</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -57,16 +57,29 @@
       background: #222; color: #fff; border: 1px solid #555; padding: 4px 10px; border-radius: 15px; font-size: 10px; font-weight: bold;
     }
     .info-card {
-      background: #1e1e1e; width: 100%; padding: 10px; border-radius: 6px; text-align: center; margin-bottom: 6px;
+      background: #1e1e1e; width: 100%; padding: 10px; border-radius: 6px; text-align: center; margin-bottom: 6px; position: relative;
     }
     body.high-contrast .info-card { background: #000; border: 2px solid #ffff00; }
     #targetName { font-size: 13px; color: #4dabf7; font-weight: bold; margin-bottom: 2px; }
-    #arrow {
-      font-size: 95px; line-height: 1; margin: 2px 0; transition: transform 0.1s linear, color 0.3s; display: inline-block; color: #007bff;
+    
+    .arrow-wrapper {
+      position: relative; display: inline-flex; justify-content: center; align-items: center; width: 140px; height: 140px; margin: 4px 0;
     }
+    .compass-dial {
+      position: absolute; width: 130px; height: 130px; border-radius: 50%; border: 1px dashed rgba(255,255,255,0.2);
+      display: flex; justify-content: center; align-items: center; font-size: 10px; color: rgba(255,255,255,0.4); pointer-events: none;
+    }
+    .target-dot {
+      position: absolute; width: 8px; height: 8px; background: #ff4757; border-radius: 50%; top: 4px; left: 61px;
+    }
+    #arrow {
+      font-size: 100px; line-height: 1; transition: transform 0.1s linear, color 0.3s; display: inline-block; color: #007bff; z-index: 2;
+    }
+    
     #distance { font-size: 28px; font-weight: bold; color: #20c997; }
     #etaDetails { font-size: 11px; color: #aaa; margin-bottom: 2px; }
     #extraStats { font-size: 10px; color: #f39c12; margin-bottom: 6px; }
+    
     .btn-grid {
       display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 6px; width: 100%;
     }
@@ -79,7 +92,6 @@
     #navTimer { font-size: 10px; color: #20c997; margin-top: 2px; }
     #status { font-size: 10px; color: #888; margin-top: 4px; }
 
-    /* トースト表示 */
     .toast-container { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 3000; pointer-events: none; }
     .toast {
       background: rgba(30, 30, 30, 0.95); color: #fff; border: 1px solid #007bff;
@@ -102,8 +114,8 @@
 <body>
 
 <div class="container" id="mainApp">
-  <div class="header-bar">
-    <span class="version-tag">v1.9.0</span>
+  <div class="header-bar" id="headerArea">
+    <span class="version-tag">v2.1.0</span>
     <h2>矢印ナビ</h2>
     <div>
       <button class="help-btn" onclick="openSosModal()" style="background:#d9534f; border:none;">🚨 SOS</button>
@@ -112,7 +124,7 @@
     </div>
   </div>
 
-  <div class="search-box">
+  <div class="search-box" id="searchArea">
     <input type="text" id="keyword" placeholder="場所や住所を検索（例: 立川駅）">
     <button onclick="searchLocation()">検索</button>
   </div>
@@ -121,7 +133,7 @@
     <span style="font-size:10px; color:#666; line-height:20px;">保存:</span>
   </div>
 
-  <div class="map-container">
+  <div class="map-container" id="mapArea">
     <div id="map"></div>
     <div class="north-compass"><span id="northNeedle">N</span></div>
     <button class="locate-btn" onclick="moveToCurrentLocation()">📍 現在地へ移動</button>
@@ -130,17 +142,26 @@
   <div class="info-card">
     <div id="targetName">地図をタップするか検索して目的地をセット</div>
     <div id="distance">-- m</div>
-    <div id="etaDetails">徒歩 約 -- 分（約 -- 歩）</div>
-    <div id="extraStats">速度: 0.0 km/h | 標高: -- m | 到着判定: 10m</div>
-    <div id="arrow">⬆</div>
+    <div id="etaDetails">徒歩 約 -- 分（約 -- 歩） | 到着予定 --:--</div>
+    <div id="extraStats">速度: 0.0 km/h | 標高: -- m | 判定: 10m</div>
     
-    <div class="btn-grid">
+    <div class="arrow-wrapper">
+      <div class="compass-dial" id="compassDial">
+        <div class="target-dot"></div>
+        N
+      </div>
+      <div id="arrow">⬆</div>
+    </div>
+    
+    <div class="btn-grid" id="controlBtns">
       <button class="sub-btn" onclick="changeTransportMode()">🏃 <span id="modeText">徒歩</span></button>
-      <button class="sub-btn" onclick="adjustCompass(-10)">↺ 角度-10°</button>
-      <button class="sub-btn" onclick="adjustCompass(10)">↻ 角度+10°</button>
+      <button class="sub-btn" onclick="adjustCompass(-10)">↺ -10°</button>
+      <button class="sub-btn" onclick="adjustCompass(10)">↻ +10°</button>
+      <button class="sub-btn" onclick="toggleFlip180()">🔁 180°反転</button>
       <button class="sub-btn" onclick="toggleMapTile()">🗺 地図切替</button>
       <button class="sub-btn" onclick="saveToFavorites()">⭐ 保存</button>
-      <button class="sub-btn" onclick="openExternalMaps()">🗺 Googleマップ</button>
+      <button class="sub-btn" onclick="openExternalMaps()">🗺 Gマップ</button>
+      <button class="sub-btn" onclick="toggleCleanView()">👁 UI隠す</button>
       <button class="sub-btn" onclick="toggleSpeech()">🔊 音声:<span id="speechStatus">ON</span></button>
       <button class="sub-btn" onclick="shareLocation()">🔗 共有</button>
     </div>
@@ -168,7 +189,7 @@
     <button onclick="toggleContrast()" style="width:100%; margin-bottom:6px;">🌙 夜間・高コントラスト切替</button>
     <button onclick="exportFavorites()" style="width:100%; margin-bottom:6px;">📥 お気に入りバックアップ</button>
     <button onclick="importFavorites()" style="width:100%; margin-bottom:6px;">📤 お気に入り復元</button>
-    <button onclick="clearFavorites()" style="width:100%; background:#d9534f;">🗑 お気に入り全削除</button>
+    <button onclick="resetAllData()" style="width:100%; background:#d9534f;">🔄 全設定・全データリセット</button>
   </div>
 </div>
 
@@ -184,8 +205,8 @@
 <!-- ヘルプ モーダル -->
 <div id="helpModal" class="modal-overlay">
   <div class="modal-content">
-    <div class="modal-header"><span>📖 アプリ機能一覧（v1.9.0）</span><button class="close-btn" onclick="closeModal()">✕</button></div>
-    <p>Waaaaay!風の高度矢印ナビアプリです。20の大増強機能を搭載しています。</p>
+    <div class="modal-header"><span>📖 アプリ機能一覧（v2.1.0）</span><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <p>Waaaaay!風の超高機能矢印ナビアプリです。</p>
   </div>
 </div>
 
@@ -194,9 +215,9 @@
   let currentLat = null, currentLng = null;
   let prevLat = null, prevLng = null;
   let rawHeading = 0, smoothedHeading = 0;
-  let manualOffset = 0, autoCompassOffset = 0;
+  let manualOffset = 0, autoCompassOffset = 0, flip180Offset = 0;
   let map, targetMarker, currentMarker, polyline;
-  let isNavigating = false, isPaused = false, enableSpeech = true;
+  let isNavigating = false, isPaused = false, enableSpeech = true, isCleanView = false;
   let announced50m = false, announced100m = false, hasVibratedForArrival = false;
   let navStartTime = null, timerInterval = null;
   let toastTimeout = null, wakeLock = null;
@@ -205,7 +226,7 @@
   const JAPAN_MAGNETIC_DECLINATION = 7.5;
   const MODES = [
     { name: '徒歩', speedMin: 67, stepLen: 0.7 },
-    { name: 'ラン', speedMin: 150, stepLen: 0.9 },
+    { name: 'ラン', speedMin: 150, speedLen: 0.9 },
     { name: 'チャリ', speedMin: 250, stepLen: 2.0 }
   ];
   let modeIdx = 0;
@@ -215,6 +236,21 @@
     dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
   };
   let currentTileLayer;
+
+  function playBeep(freq = 880, type = 'sine', duration = 0.15) {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.value = freq;
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + duration);
+      osc.stop(audioCtx.currentTime + duration);
+    } catch(e) {}
+  }
 
   window.onload = function() {
     map = L.map('map').setView([35.6995, 139.4137], 13);
@@ -255,6 +291,22 @@
   }
   function closeSosModal() { document.getElementById('sosModal').style.display = 'none'; }
 
+  function toggleCleanView() {
+    isCleanView = !isCleanView;
+    const disp = isCleanView ? 'none' : '';
+    document.getElementById('headerArea').style.display = disp;
+    document.getElementById('searchArea').style.display = disp;
+    document.getElementById('favBar').style.display = disp;
+    document.getElementById('mapArea').style.display = disp;
+    showToast(isCleanView ? '👁 UI隠しモード (タップで復帰)' : '👁 通常表示モード');
+  }
+
+  function toggleFlip180() {
+    flip180Offset = (flip180Offset === 0) ? 180 : 0;
+    showToast(`🔁 180°反転: ${flip180Offset === 180 ? 'ON' : 'OFF'}`);
+    updateUI();
+  }
+
   function updateArrivalDistSetting() {
     arrivalThreshold = parseInt(document.getElementById('arrivalDistSelect').value);
     showToast(`🎯 到着判定: ${arrivalThreshold}m に変更`);
@@ -264,6 +316,15 @@
   function toggleContrast() {
     document.body.classList.toggle('high-contrast');
     showToast('🌙 夜間モード切替');
+  }
+
+  function resetAllData() {
+    if (confirm('すべての設定とお気に入りを初期化しますか？')) {
+      localStorage.clear();
+      renderFavorites();
+      closeConfigModal();
+      showToast('🔄 全データをリセットしました');
+    }
   }
 
   function copySosCoords() {
@@ -334,14 +395,6 @@
     }
   }
 
-  function clearFavorites() {
-    if (confirm('保存した目的地履歴を消去しますか？')) {
-      localStorage.removeItem('navi_favs');
-      renderFavorites();
-      showToast('🗑 履歴を削除しました');
-    }
-  }
-
   function renderFavorites() {
     const favBar = document.getElementById('favBar');
     let favs = JSON.parse(localStorage.getItem('navi_favs') || '[]');
@@ -352,248 +405,4 @@
       chip.innerText = f.name;
       chip.onclick = () => {
         map.flyTo([f.lat, f.lng], 15);
-        setTarget(f.lat, f.lng, f.name);
-        showToast(`🎯 ${f.name} を選択`);
-      };
-      favBar.appendChild(chip);
-    });
-  }
-
-  function speakText(text) {
-    if (!enableSpeech || !('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    const uttr = new SpeechSynthesisUtterance(text);
-    uttr.lang = 'ja-JP';
-    window.speechSynthesis.speak(uttr);
-  }
-
-  function toggleSpeech() {
-    enableSpeech = !enableSpeech;
-    document.getElementById('speechStatus').innerText = enableSpeech ? 'ON' : 'OFF';
-    showToast(enableSpeech ? '🔊 音声 ON' : '🔇 音声 OFF');
-  }
-
-  function shareLocation() {
-    if (currentLat === null) { showToast('⚠️ 現在地を取得後に共有可能です'); return; }
-    const url = `https://maps.google.com/?q=${currentLat},${currentLng}`;
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(url);
-      showToast('🔗 地図リンクをコピーしました');
-    }
-  }
-
-  function fetchInitialLocationFast() {
-    if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition((pos) => {
-        currentLat = pos.coords.latitude;
-        currentLng = pos.coords.longitude;
-        updateCurrentMarkerOnMap();
-      }, null, { enableHighAccuracy: true, maximumAge: 10000, timeout: 3000 });
-    }
-  }
-
-  function setTarget(lat, lng, label) {
-    targetLat = lat; targetLng = lng;
-    hasVibratedForArrival = false; announced50m = false; announced100m = false;
-    document.getElementById('targetName').innerText = `目的地: ${label}`;
-    if (targetMarker) map.removeLayer(targetMarker);
-    targetMarker = L.marker([lat, lng]).addTo(map).bindPopup(label).openPopup();
-    updatePolyline(); updateUI();
-  }
-
-  function updatePolyline() {
-    if (currentLat !== null && targetLat !== null) {
-      if (polyline) map.removeLayer(polyline);
-      polyline = L.polyline([[currentLat, currentLng], [targetLat, targetLng]], { color: '#ff4757', weight: 3, dashArray: '5, 8' }).addTo(map);
-    }
-  }
-
-  function searchLocation() {
-    const query = document.getElementById('keyword').value;
-    if (!query) return;
-    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`)
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.length > 0) {
-          const lat = parseFloat(data[0].lat);
-          const lon = parseFloat(data[0].lon);
-          map.flyTo([lat, lon], 15, { duration: 0.4 });
-          setTarget(lat, lon, data[0].display_name.split(',')[0]);
-          showToast(`🔍 ${data[0].display_name.split(',')[0]} をセット`);
-        }
-      });
-  }
-
-  function moveToCurrentLocation() {
-    if (currentLat !== null) {
-      map.flyTo([currentLat, currentLng], 16, { duration: 0.3 });
-      updateCurrentMarkerOnMap();
-      showToast('📍 現在地に移動');
-      updateUI();
-    }
-  }
-
-  function updateCurrentMarkerOnMap() {
-    if (currentLat === null) return;
-    if (currentMarker) map.removeLayer(currentMarker);
-    currentMarker = L.circleMarker([currentLat, currentLng], { color: '#007bff', fillColor: '#007bff', fillOpacity: 0.8, radius: 8 }).addTo(map);
-  }
-
-  function calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371000;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
-  }
-
-  function calculateBearing(lat1, lon1, lat2, lon2) {
-    const φ1 = lat1 * Math.PI / 180, φ2 = lat2 * Math.PI / 180;
-    const Δλ = (lon2 - lon1) * Math.PI / 180;
-    const y = Math.sin(Δλ) * Math.cos(φ2);
-    const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
-    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
-  }
-
-  function updateUI() {
-    if (currentLat === null || targetLat === null) return;
-
-    const dist = calculateDistance(currentLat, currentLng, targetLat, targetLng);
-    document.getElementById('distance').innerText = dist >= 1000 ? (dist / 1000).toFixed(2) + ' km' : Math.round(dist) + ' m';
-
-    const mode = MODES[modeIdx];
-    const steps = Math.round(dist / mode.stepLen);
-    const estMinutes = Math.max(1, Math.round(dist / mode.speedMin));
-    document.getElementById('etaDetails').innerText = `${mode.name} 約 ${estMinutes} 分（約 ${steps.toLocaleString()} 歩）`;
-
-    // 距離に応じた矢印動的カラー変化（青→緑→オレンジ→赤）
-    const arrowElem = document.getElementById('arrow');
-    if (!document.body.classList.contains('high-contrast')) {
-      if (dist <= 20) arrowElem.style.color = '#ff4757';
-      else if (dist <= 100) arrowElem.style.color = '#ffa502';
-      else if (dist <= 500) arrowElem.style.color = '#20c997';
-      else arrowElem.style.color = '#007bff';
-    }
-
-    document.getElementById('extraStats').innerText = 
-      `速度: ${(currentSpeed * 3.6).toFixed(1)} km/h | 標高: ${Math.round(currentAltitude)} m | 到着判定: ${arrivalThreshold}m`;
-
-    let finalHeading = (smoothedHeading + autoCompassOffset + manualOffset) % 360;
-    const targetBearing = calculateBearing(currentLat, currentLng, targetLat, targetLng);
-    let arrowRotation = targetBearing - finalHeading;
-
-    document.getElementById('northNeedle').style.transform = `rotate(${-finalHeading}deg)`;
-    arrowElem.style.transform = `rotate(${arrowRotation}deg)`;
-
-    if (isNavigating && !isPaused) {
-      if (dist <= 100 && dist > 50 && !announced100m) {
-        speakText('目的地までおよそ100メートルです'); showToast('📢 あと 100m'); announced100m = true;
-      } else if (dist <= 50 && dist > arrivalThreshold && !announced50m) {
-        speakText('まもなく目的地付近です'); showToast('📢 あと 50m'); announced50m = true;
-      } else if (dist <= arrivalThreshold && !hasVibratedForArrival) {
-        if ('vibrate' in navigator) navigator.vibrate([200, 100, 200, 100, 400]);
-        speakText('目的地付近に到着しました');
-        confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
-        hasVibratedForArrival = true;
-        showToast('🎉 目的地付近に到着しました！');
-      }
-    }
-  }
-
-  function toggleStartPause() {
-    if (targetLat === null) { showToast('⚠️ 先に目的地を設定してください'); return; }
-
-    if (!isNavigating) {
-      isNavigating = true; isPaused = false;
-      navStartTime = new Date();
-      if (timerInterval) clearInterval(timerInterval);
-      timerInterval = setInterval(updateTimer, 1000);
-      requestWakeLock();
-      speakText('ナビゲーションを開始します');
-      showToast('🚀 ナビゲーション開始');
-      document.getElementById('startBtn').innerText = '⏸ 一時停止';
-      document.getElementById('startBtn').style.backgroundColor = '#ffc107';
-      startSensors();
-    } else if (!isPaused) {
-      isPaused = true;
-      showToast('⏸ ナビ一時停止中');
-      document.getElementById('startBtn').innerText = '▶ ナビ再開';
-      document.getElementById('startBtn').style.backgroundColor = '#28a745';
-    } else {
-      isPaused = false;
-      showToast('▶ ナビ再開');
-      document.getElementById('startBtn').innerText = '⏸ 一時停止';
-      document.getElementById('startBtn').style.backgroundColor = '#ffc107';
-    }
-  }
-
-  async function requestWakeLock() {
-    try {
-      if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
-    } catch (err) {}
-  }
-
-  function startSensors() {
-    if ('ondeviceorientationabsolute' in window) {
-      window.addEventListener('deviceorientationabsolute', handleGalaxyOrientation, true);
-    } else {
-      window.addEventListener('deviceorientation', handleGalaxyOrientation, true);
-    }
-
-    if ('geolocation' in navigator) {
-      navigator.geolocation.watchPosition(
-        (pos) => {
-          prevLat = currentLat; prevLng = currentLng;
-          currentLat = pos.coords.latitude;
-          currentLng = pos.coords.longitude;
-          currentSpeed = pos.coords.speed || 0;
-          currentAltitude = pos.coords.altitude || 0;
-
-          updateCurrentMarkerOnMap();
-          updatePolyline();
-
-          if (prevLat !== null) {
-            const moveDist = calculateDistance(prevLat, prevLng, currentLat, currentLng);
-            if (moveDist > 3) {
-              const gpsHeading = calculateBearing(prevLat, prevLng, currentLat, currentLng);
-              autoCompassOffset = (gpsHeading - smoothedHeading + 360) % 360;
-            }
-          }
-          updateUI();
-        },
-        (err) => {},
-        { enableHighAccuracy: true, maximumAge: 1000, timeout: 3000 }
-      );
-    }
-  }
-
-  function updateTimer() {
-    if (!navStartTime || isPaused) return;
-    const diffSec = Math.floor((new Date() - navStartTime) / 1000);
-    const m = String(Math.floor(diffSec / 60)).padStart(2, '0');
-    const s = String(diffSec % 60).padStart(2, '0');
-    document.getElementById('navTimer').innerText = `経過時間: ${m}:${s}`;
-  }
-
-  function handleGalaxyOrientation(e) {
-    let heading = null;
-    if (e.alpha !== null && e.alpha !== undefined) heading = 360 - e.alpha;
-
-    if (heading !== null) {
-      heading = (heading + JAPAN_MAGNETIC_DECLINATION) % 360;
-      if (heading < 0) heading += 360;
-
-      rawHeading = heading;
-      let diff = rawHeading - smoothedHeading;
-      if (diff > 180) diff -= 360;
-      if (diff < -180) diff += 360;
-      smoothedHeading = (smoothedHeading + diff * 0.3) % 360;
-      if (smoothedHeading < 0) smoothedHeading += 360;
-
-      updateUI();
-    }
-  }
-</script>
-
-</body>
-</html>
+        
