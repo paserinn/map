@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>矢印ナビ - 現在地自動更新対応</title>
-  <!-- Leaflet.js (無料地図ライブラリ) -->
+  <title>矢印ナビ - 完全自動方向補正</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
@@ -32,18 +31,12 @@
       padding: 10px 16px; background-color: #007bff; color: white;
       border: none; border-radius: 6px; font-weight: bold; cursor: pointer;
     }
-    .map-container {
-      position: relative; width: 100%; margin-bottom: 15px;
-    }
-    #map {
-      width: 100%; height: 220px; border-radius: 8px;
-      border: 1px solid #333;
-    }
+    .map-container { position: relative; width: 100%; margin-bottom: 15px; }
+    #map { width: 100%; height: 200px; border-radius: 8px; border: 1px solid #333; }
     .locate-btn {
       position: absolute; bottom: 10px; right: 10px; z-index: 1000;
       background: #222; color: #fff; border: 1px solid #555;
       padding: 6px 12px; border-radius: 20px; font-size: 12px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.5);
     }
     .info-card {
       background: #1e1e1e; width: 100%; padding: 15px; border-radius: 8px;
@@ -52,9 +45,10 @@
     #targetName { font-size: 14px; color: #4dabf7; margin-bottom: 5px; }
     #arrow {
       font-size: 120px; line-height: 1; margin: 15px 0;
-      transition: transform 0.1s linear; display: inline-block;
+      transition: transform 0.2s ease-out; display: inline-block;
     }
     #distance { font-size: 36px; font-weight: bold; color: #20c997; }
+    #autoCalibStatus { font-size: 11px; color: #17a2b8; margin-top: 5px; }
     #status { font-size: 12px; color: #888; margin-top: 10px; }
   </style>
 </head>
@@ -63,23 +57,22 @@
 <div class="container">
   <h2>矢印ナビ</h2>
 
-  <!-- 検索フォーム -->
   <div class="search-box">
     <input type="text" id="keyword" placeholder="場所や住所を検索（例: 立川駅）">
     <button onclick="searchLocation()">検索</button>
   </div>
 
-  <!-- 地図エリア -->
   <div class="map-container">
     <div id="map"></div>
     <button class="locate-btn" onclick="recenterToCurrentLocation()">📍 現在地へ移動</button>
   </div>
 
-  <!-- ナビゲーション表示部 -->
   <div class="info-card">
     <div id="targetName">地図をタップするか検索して目的地をセット</div>
     <div id="distance">-- m</div>
     <div id="arrow">⬆</div>
+    <div id="autoCalibStatus">自動補正: 待機中（歩行開始で精度向上）</div>
+
     <button onclick="startNavigation()" style="width: 100%; margin-top: 10px; background-color: #28a745;">
       位置・コンパスを開始
     </button>
@@ -88,40 +81,36 @@
 </div>
 
 <script>
-  let targetLat = null;
-  let targetLng = null;
-  let currentLat = null;
-  let currentLng = null;
-  let currentHeading = 0;
+  let targetLat = null, targetLng = null;
+  let currentLat = null, currentLng = null;
+  let prevLat = null, prevLng = null;
+  let rawHeading = 0;
+  let smoothedHeading = 0;
+  let autoCompassOffset = 0; // 歩行軌跡から自動算出される補正角度
   let map, targetMarker, currentMarker;
   let hasInitialCentered = false;
 
-  // 初期化：マップの生成
+  const JAPAN_MAGNETIC_DECLINATION = 7.5; // 日本の平均地磁気偏角（磁北→真北補正）
+
   window.onload = function() {
     map = L.map('map').setView([35.6895, 139.6917], 13);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap'
     }).addTo(map);
 
-    // 地図タップで目的地をセット
     map.on('click', function(e) {
       setTarget(e.latlng.lat, e.latlng.lng, 'タップした位置');
     });
   };
 
-  // 目的地をセット
   function setTarget(lat, lng, label) {
-    targetLat = lat;
-    targetLng = lng;
+    targetLat = lat; targetLng = lng;
     document.getElementById('targetName').innerText = `目的地: ${label}`;
-
     if (targetMarker) map.removeLayer(targetMarker);
     targetMarker = L.marker([lat, lng]).addTo(map).bindPopup(label).openPopup();
-
     updateUI();
   }
 
-  // 場所の検索
   function searchLocation() {
     const query = document.getElementById('keyword').value;
     if (!query) return;
@@ -130,28 +119,20 @@
       .then(res => res.json())
       .then(data => {
         if (data && data.length > 0) {
-          const result = data[0];
-          const lat = parseFloat(result.lat);
-          const lon = parseFloat(result.lon);
+          const lat = parseFloat(data[0].lat);
+          const lon = parseFloat(data[0].lon);
           map.setView([lat, lon], 15);
-          setTarget(lat, lon, result.display_name.split(',')[0]);
-        } else {
-          alert('見つかりませんでした。別のキーワードで試してください。');
+          setTarget(lat, lon, data[0].display_name.split(',')[0]);
         }
-      })
-      .catch(() => alert('検索中にエラーが発生しました。'));
+      });
   }
 
-  // 現在地へ地図の中心を戻すボタンの処理
   function recenterToCurrentLocation() {
     if (currentLat !== null && currentLng !== null) {
       map.setView([currentLat, currentLng], 16);
-    } else {
-      alert('現在地を取得中です。「位置・コンパスを開始」ボタンを押してください。');
     }
   }
 
-  // 2点間の距離計算
   function calculateDistance(lat1, lon1, lat2, lon2) {
     const R = 6371000;
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -162,7 +143,6 @@
     return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
   }
 
-  // 方位角計算
   function calculateBearing(lat1, lon1, lat2, lon2) {
     const φ1 = lat1 * Math.PI / 180, φ2 = lat2 * Math.PI / 180;
     const Δλ = (lon2 - lon1) * Math.PI / 180;
@@ -171,7 +151,6 @@
     return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
   }
 
-  // UI更新
   function updateUI() {
     if (currentLat === null || currentLng === null || targetLat === null) return;
 
@@ -180,14 +159,16 @@
       ? (dist / 1000).toFixed(2) + ' km' 
       : Math.round(dist) + ' m';
 
+    // 自動補正適用後のデバイス方位
+    let finalHeading = (smoothedHeading + autoCompassOffset) % 360;
+
     const targetBearing = calculateBearing(currentLat, currentLng, targetLat, targetLng);
-    const arrowRotation = targetBearing - currentHeading;
+    let arrowRotation = targetBearing - finalHeading;
+
     document.getElementById('arrow').style.transform = `rotate(${arrowRotation}deg)`;
   }
 
-  // ナビゲーション開始
   function startNavigation() {
-    // iOSコンパス許可
     if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
       DeviceOrientationEvent.requestPermission().then(response => {
         if (response === 'granted') {
@@ -199,28 +180,36 @@
       window.addEventListener('deviceorientation', handleOrientation, true);
     }
 
-    // GPSリアルタイム監視
     if ('geolocation' in navigator) {
       navigator.geolocation.watchPosition(
         (pos) => {
+          prevLat = currentLat;
+          prevLng = currentLng;
           currentLat = pos.coords.latitude;
           currentLng = pos.coords.longitude;
           document.getElementById('status').innerText = 'GPS・コンパス稼働中';
 
-          // 初回GPS取得時に現在地を中心へ移動
           if (!hasInitialCentered) {
             map.setView([currentLat, currentLng], 15);
             hasInitialCentered = true;
           }
 
-          // 現在地に青色のマーカーを更新描画
           if (currentMarker) map.removeLayer(currentMarker);
           currentMarker = L.circleMarker([currentLat, currentLng], {
-            color: '#007bff',
-            fillColor: '#007bff',
-            fillOpacity: 0.8,
-            radius: 8
+            color: '#007bff', fillColor: '#007bff', fillOpacity: 0.8, radius: 8
           }).addTo(map);
+
+          // 移動ベクトルによるコンパス自動キャリブレーション処理
+          if (prevLat !== null && prevLng !== null) {
+            const moveDist = calculateDistance(prevLat, prevLng, currentLat, currentLng);
+            // 3メートル以上移動した際にGPS移動方位とコンパス値を突き合わせて自動補正
+            if (moveDist > 3) {
+              const gpsHeading = calculateBearing(prevLat, prevLng, currentLat, currentLng);
+              const headingDiff = gpsHeading - smoothedHeading;
+              autoCompassOffset = (headingDiff + 360) % 360;
+              document.getElementById('autoCalibStatus').innerText = '自動補正: 最適化完了';
+            }
+          }
 
           updateUI();
         },
@@ -230,14 +219,32 @@
     }
   }
 
-  // コンパス方位の受取
+  // ノイズ除去・低周波フィルタリング処理
   function handleOrientation(e) {
-    if (e.webkitCompassHeading) {
-      currentHeading = e.webkitCompassHeading;
+    let heading = null;
+
+    if (e.webkitCompassHeading !== undefined && e.webkitCompassHeading !== null) {
+      heading = e.webkitCompassHeading;
     } else if (e.alpha !== null) {
-      currentHeading = 360 - e.alpha;
+      heading = 360 - e.alpha;
     }
-    updateUI();
+
+    if (heading !== null) {
+      const screenOrientation = (window.screen.orientation && window.screen.orientation.angle) || window.orientation || 0;
+      heading = (heading + screenOrientation + JAPAN_MAGNETIC_DECLINATION) % 360;
+      if (heading < 0) heading += 360;
+
+      rawHeading = heading;
+
+      // ローパスフィルタ（滑らかな動きへ変換）
+      let diff = rawHeading - smoothedHeading;
+      if (diff > 180) diff -= 360;
+      if (diff < -180) diff += 360;
+      smoothedHeading = (smoothedHeading + diff * 0.2) % 360;
+      if (smoothedHeading < 0) smoothedHeading += 360;
+
+      updateUI();
+    }
   }
 </script>
 
