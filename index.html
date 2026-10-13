@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>矢印ナビ</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background-color: #121212;
+      color: #ffffff;
+      font-family: sans-serif;
+    }
+    .container {
+      text-align: center;
+      width: 90%;
+      max-width: 400px;
+    }
+    .input-group {
+      margin-bottom: 20px;
+    }
+    input {
+      width: 40%;
+      padding: 8px;
+      margin: 4px;
+      border-radius: 4px;
+      border: 1px solid #444;
+      background: #222;
+      color: #fff;
+    }
+    button {
+      padding: 10px 20px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    #arrow {
+      font-size: 150px;
+      line-height: 1;
+      margin: 30px 0;
+      transition: transform 0.2s ease-out;
+      display: inline-block;
+    }
+    #distance {
+      font-size: 32px;
+      font-weight: bold;
+    }
+    #status {
+      margin-top: 15px;
+      font-size: 14px;
+      color: #aaa;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h2>矢印ナビ</h2>
+  <div class="input-group">
+    <input type="number" id="targetLat" step="any" placeholder="目的地 緯度">
+    <input type="number" id="targetLng" step="any" placeholder="目的地 経度">
+    <br><br>
+    <button onclick="startNavigation()">ナビ開始</button>
+  </div>
+
+  <div id="arrow">⬆</div>
+  <div id="distance">0 m</div>
+  <div id="status">位置情報とコンパスを許可してください</div>
+</div>
+
+<script>
+  let targetLat = 0;
+  let targetLng = 0;
+  let currentLat = null;
+  let currentLng = null;
+  let currentHeading = 0; // デバイスの向いている方位（度）
+
+  // 2点間の距離（Haversineの公式）
+  function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371000; // 地球の半径 (m)
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+
+  // 現在地から目的地への方位角を計算（真北基準: 0〜360度）
+  function calculateBearing(lat1, lon1, lat2, lon2) {
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+    const y = Math.sin(Δλ) * Math.cos(φ2);
+    const x = Math.cos(φ1) * Math.sin(φ2) -
+              Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+    const θ = Math.atan2(y, x);
+    return (θ * 180 / Math.PI + 360) % 360;
+  }
+
+  // 画面の矢印と距離を更新
+  function updateUI() {
+    if (currentLat === null || currentLng === null || targetLat === 0) return;
+
+    // 距離計算
+    const dist = calculateDistance(currentLat, currentLng, targetLat, targetLng);
+    document.getElementById('distance').innerText = dist >= 1000 
+      ? (dist / 1000).toFixed(2) + ' km' 
+      : Math.round(dist) + ' m';
+
+    // 目的地方位とデバイス向きから矢印の回転角度を計算
+    const targetBearing = calculateBearing(currentLat, currentLng, targetLat, targetLng);
+    const arrowRotation = targetBearing - currentHeading;
+
+    document.getElementById('arrow').style.transform = `rotate(${arrowRotation}deg)`;
+  }
+
+  // ナビゲーション開始
+  function startNavigation() {
+    targetLat = parseFloat(document.getElementById('targetLat').value);
+    targetLng = parseFloat(document.getElementById('targetLng').value);
+
+    if (isNaN(targetLat) || isNaN(targetLng)) {
+      alert('正しい緯度と経度を入力してください。');
+      return;
+    }
+
+    // GPS取得設定
+    if ('geolocation' in navigator) {
+      navigator.geolocation.watchPosition(
+        (position) => {
+          currentLat = position.coords.latitude;
+          currentLng = position.coords.longitude;
+          document.getElementById('status').innerText = '位置情報更新中';
+          updateUI();
+        },
+        (error) => {
+          document.getElementById('status').innerText = 'GPSエラー: ' + error.message;
+        },
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+      );
+    } else {
+      alert('お使いの端末はGPSに対応していません。');
+    }
+
+    // コンパス（デバイスの向き）取得設定
+    if (window.DeviceOrientationEvent) {
+      window.addEventListener('deviceorientation absolute', handleOrientation, true);
+      window.addEventListener('deviceorientation', handleOrientation, true);
+    }
+  }
+
+  function handleOrientation(event) {
+    if (event.webkitCompassHeading) {
+      // iOS向けコンパス方位
+      currentHeading = event.webkitCompassHeading;
+    } else if (event.alpha !== null) {
+      // Android向けコンパス方位 (絶対値取得)
+      currentHeading = 360 - event.alpha;
+    }
+    updateUI();
+  }
+</script>
+
+</body>
+</html>
