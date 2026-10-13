@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>矢印ナビ - v2.5.0 最短角度補正・回転ブレ修正版</title>
+  <title>矢印ナビ - v2.7.0 広域半径対応版</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -106,7 +106,7 @@
     .toast-container { position: fixed; top: 15px; left: 50%; transform: translateX(-50%); z-index: 3500; pointer-events: none; }
     .toast {
       background: rgba(30, 30, 30, 0.95); color: #fff; border: 1px solid #007bff;
-      padding: 8px 18px; border-radius: 20px; font-size: 12px; font-weight: bold;
+      padding: 8px 18px; border-radius: 12px; font-size: 12px; font-weight: bold;
       opacity: 0; transform: translateY(-20px); transition: all 0.3s ease; box-shadow: 0 4px 12px rgba(0,0,0,0.6);
     }
     .toast.show { opacity: 1; transform: translateY(0); }
@@ -126,7 +126,7 @@
 
 <div class="container" id="mainApp">
   <div class="header-bar" id="headerArea">
-    <span class="version-tag">v2.5.0</span>
+    <span class="version-tag">v2.7.0</span>
     <h2>矢印ナビ</h2>
     <div>
       <button class="help-btn" onclick="openSosModal()" style="background:#d9534f; border:none;">🚨 SOS</button>
@@ -169,6 +169,7 @@
     
     <div class="btn-grid" id="controlBtns">
       <button class="sub-btn" onclick="changeTransportMode()">🏃 <span id="modeText">徒歩</span></button>
+      <button class="sub-btn" onclick="cycleRadiusCircle()">⭕ 範囲:<span id="radiusText">OFF</span></button>
       <button class="sub-btn" onclick="adjustCompass(-10)">↺ -10°</button>
       <button class="sub-btn" onclick="adjustCompass(10)">↻ +10°</button>
       <button class="sub-btn" onclick="toggleFlip180()">🔁 180°反転</button>
@@ -219,8 +220,8 @@
 <!-- ヘルプ モーダル -->
 <div id="helpModal" class="modal-overlay">
   <div class="modal-content">
-    <div class="modal-header"><span>📖 アプリ機能一覧（v2.5.0）</span><button class="close-btn" onclick="closeModal()">✕</button></div>
-    <p>180度境界での回転飛びを抑止した安定コンパスナビです。</p>
+    <div class="modal-header"><span>📖 アプリ機能一覧（v2.7.0）</span><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <p>1km、5km、10km、15km、20km、30km、40kmの広域半径描画に対応しました。</p>
   </div>
 </div>
 
@@ -230,14 +231,17 @@
   let prevLat = null, prevLng = null;
   let rawHeading = 0, smoothedHeading = 0;
   let manualOffset = 0, autoCompassOffset = 0, flip180Offset = 0;
-  let map = null, targetMarker = null, currentMarker = null, polyline = null;
+  let map = null, targetMarker = null, currentMarker = null, polyline = null, radiusCircleMarker = null;
   let isNavigating = false, isPaused = false, enableSpeech = true, isCleanView = false;
   let announced50m = false, announced100m = false, hasVibratedForArrival = false;
   let navStartTime = null, timerInterval = null;
   let toastTimeout = null, wakeLock = null, searchDebounceTimer = null;
   let currentSpeed = 0, currentAltitude = 0, arrivalThreshold = 10;
   
-  // 旋回補正用（直前の旋回累積角度）
+  // 指定された半径オプション (0: OFF, 1000m: 1km, 5000m: 5km, 10000m: 10km, 15000m: 15km, 20000m: 20km, 30000m: 30km, 40000m: 40km)
+  const RADIUS_OPTIONS = [0, 1000, 5000, 10000, 15000, 20000, 30000, 40000];
+  let radiusIdx = 0;
+
   let currentDisplayArrowRotation = 0;
   let currentDisplayNorthRotation = 0;
   
@@ -310,6 +314,45 @@
     toast.classList.add('show');
     if (toastTimeout) clearTimeout(toastTimeout);
     toastTimeout = setTimeout(() => toast.classList.remove('show'), 2200);
+  }
+
+  function cycleRadiusCircle() {
+    radiusIdx = (radiusIdx + 1) % RADIUS_OPTIONS.length;
+    const radiusMeters = RADIUS_OPTIONS[radiusIdx];
+    const textElem = document.getElementById('radiusText');
+    
+    if (radiusMeters === 0) {
+      textElem.innerText = 'OFF';
+      showToast('⭕ 半径円表示: OFF');
+    } else {
+      const label = (radiusMeters / 1000) + 'km';
+      textElem.innerText = label;
+      showToast(`⭕ 半径 ${label} の円を表示`);
+    }
+    updateRadiusCircleOnMap();
+  }
+
+  function updateRadiusCircleOnMap() {
+    if (!map || currentLat === null || currentLng === null) return;
+    const radiusMeters = RADIUS_OPTIONS[radiusIdx];
+
+    if (radiusCircleMarker) {
+      map.removeLayer(radiusCircleMarker);
+      radiusCircleMarker = null;
+    }
+
+    if (radiusMeters > 0) {
+      radiusCircleMarker = L.circle([currentLat, currentLng], {
+        radius: radiusMeters,
+        color: '#007bff',
+        fillColor: '#007bff',
+        fillOpacity: 0.12,
+        weight: 1.5,
+        dashArray: '4, 6'
+      }).addTo(map);
+
+      map.fitBounds(radiusCircleMarker.getBounds(), { padding: [15, 15] });
+    }
   }
 
   function handleSearchInput(val) {
@@ -509,6 +552,7 @@
       navigator.geolocation.getCurrentPosition((pos) => {
         applyFilteredGPS(pos.coords.latitude, pos.coords.longitude);
         updateCurrentMarkerOnMap();
+        updateRadiusCircleOnMap();
       }, null, { enableHighAccuracy: true, maximumAge: 10000, timeout: 4000 });
     }
   }
@@ -565,6 +609,7 @@
         applyFilteredGPS(pos.coords.latitude, pos.coords.longitude);
         if (map) map.flyTo([currentLat, currentLng], 16, { duration: 0.3 });
         updateCurrentMarkerOnMap();
+        updateRadiusCircleOnMap();
         updatePolyline();
         showToast('📍 現在地に移動しました');
         updateUI();
@@ -594,7 +639,6 @@
     return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
   }
 
-  // ★180度境界グルン飛び防止アルゴリズム★
   function getShortestRotation(currentDeg, targetDeg) {
     let diff = (targetDeg - (currentDeg % 360) + 540) % 360 - 180;
     return currentDeg + diff;
@@ -631,7 +675,6 @@
     const targetBearing = calculateBearing(currentLat, currentLng, targetLat, targetLng);
     let targetArrowDeg = (targetBearing - finalHeading + 360) % 360;
 
-    // 旋回計算（不連続点のジャンプを防ぎ、最も近い最短方向へスムーズ旋回）
     currentDisplayArrowRotation = getShortestRotation(currentDisplayArrowRotation, targetArrowDeg);
     currentDisplayNorthRotation = getShortestRotation(currentDisplayNorthRotation, -finalHeading);
 
@@ -707,6 +750,7 @@
           currentAltitude = pos.coords.altitude || 0;
 
           updateCurrentMarkerOnMap();
+          updateRadiusCircleOnMap();
           updatePolyline();
 
           if (prevLat !== null) {
