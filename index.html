@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>矢印ナビ - v2.7.0 広域半径対応版</title>
+  <title>矢印ナビ - v2.8.0 十字東西南北コンパス版</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -57,12 +57,29 @@
     }
     .map-container { position: relative; width: 100%; margin-bottom: 8px; }
     #map { width: 100%; height: 180px; border-radius: 6px; border: 1px solid #333; background: #222; }
+    
+    /* ★右上ミニコンパス：十字（十）東西南北デザイン★ */
     .north-compass {
       position: absolute; top: 8px; right: 8px; z-index: 1000;
-      width: 32px; height: 32px; background: rgba(0,0,0,0.7); border: 1px solid #555;
+      width: 44px; height: 44px; background: rgba(0,0,0,0.8); border: 1px solid #666;
       border-radius: 50%; display: flex; justify-content: center; align-items: center;
-      font-weight: bold; color: #ff4757; font-size: 12px;
     }
+    .mini-cross-dial {
+      position: relative; width: 100%; height: 100%; border-radius: 50%;
+      display: flex; justify-content: center; align-items: center;
+    }
+    .mini-cross-dial::before {
+      content: ''; position: absolute; top: 6px; bottom: 6px; left: 50%; width: 1px; background: rgba(255,255,255,0.3); transform: translateX(-50%);
+    }
+    .mini-cross-dial::after {
+      content: ''; position: absolute; left: 6px; right: 6px; top: 50%; height: 1px; background: rgba(255,255,255,0.3); transform: translateY(-50%);
+    }
+    .mini-label { position: absolute; font-size: 9px; font-weight: bold; line-height: 1; }
+    .mini-label.n { top: 2px; color: #ff4757; }
+    .mini-label.e { right: 2px; color: #ccc; }
+    .mini-label.s { bottom: 2px; color: #ccc; }
+    .mini-label.w { left: 2px; color: #ccc; }
+
     .locate-btn {
       position: absolute; bottom: 6px; right: 6px; z-index: 1000;
       background: #222; color: #fff; border: 1px solid #555; padding: 4px 10px; border-radius: 15px; font-size: 10px; font-weight: bold;
@@ -73,15 +90,28 @@
     body.high-contrast .info-card { background: #000; border: 2px solid #ffff00; }
     #targetName { font-size: 13px; color: #4dabf7; font-weight: bold; margin-bottom: 2px; }
     
+    /* ★矢印背景コンパス：十字クロス＆四方位表記★ */
     .arrow-wrapper {
-      position: relative; display: inline-flex; justify-content: center; align-items: center; width: 140px; height: 140px; margin: 4px 0;
+      position: relative; display: inline-flex; justify-content: center; align-items: center; width: 150px; height: 150px; margin: 4px 0;
     }
     .compass-dial {
-      position: absolute; width: 130px; height: 130px; border-radius: 50%; border: 1px dashed rgba(255,255,255,0.2);
-      display: flex; justify-content: center; align-items: center; font-size: 10px; color: rgba(255,255,255,0.4); pointer-events: none;
+      position: absolute; width: 140px; height: 140px; border-radius: 50%; border: 1px dashed rgba(255,255,255,0.25);
+      pointer-events: none;
     }
+    .compass-dial::before {
+      content: ''; position: absolute; top: 8px; bottom: 8px; left: 50%; width: 1px; background: rgba(255,255,255,0.2); transform: translateX(-50%);
+    }
+    .compass-dial::after {
+      content: ''; position: absolute; left: 8px; right: 8px; top: 50%; height: 1px; background: rgba(255,255,255,0.2); transform: translateY(-50%);
+    }
+    .dial-label { position: absolute; font-size: 11px; font-weight: bold; }
+    .dial-label.n { top: 2px; left: 50%; transform: translateX(-50%); color: #ff4757; }
+    .dial-label.e { right: 4px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.5); }
+    .dial-label.s { bottom: 2px; left: 50%; transform: translateX(-50%); color: rgba(255,255,255,0.5); }
+    .dial-label.w { left: 4px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.5); }
+
     .target-dot {
-      position: absolute; width: 8px; height: 8px; background: #ff4757; border-radius: 50%; top: 4px; left: 61px;
+      position: absolute; width: 8px; height: 8px; background: #ff4757; border-radius: 50%; top: 4px; left: 66px;
     }
     #arrow {
       font-size: 100px; line-height: 1; transition: transform 0.1s cubic-bezier(0.25, 0.1, 0.25, 1), color 0.3s; display: inline-block; color: #007bff; z-index: 2;
@@ -126,7 +156,7 @@
 
 <div class="container" id="mainApp">
   <div class="header-bar" id="headerArea">
-    <span class="version-tag">v2.7.0</span>
+    <span class="version-tag">v2.8.0</span>
     <h2>矢印ナビ</h2>
     <div>
       <button class="help-btn" onclick="openSosModal()" style="background:#d9534f; border:none;">🚨 SOS</button>
@@ -149,7 +179,14 @@
 
   <div class="map-container" id="mapArea">
     <div id="map"></div>
-    <div class="north-compass"><span id="northNeedle">N</span></div>
+    <div class="north-compass">
+      <div class="mini-cross-dial" id="northNeedle">
+        <span class="mini-label n">N</span>
+        <span class="mini-label e">E</span>
+        <span class="mini-label s">S</span>
+        <span class="mini-label w">W</span>
+      </div>
+    </div>
     <button class="locate-btn" onclick="moveToCurrentLocation()">📍 現在地へ移動</button>
   </div>
 
@@ -161,8 +198,11 @@
     
     <div class="arrow-wrapper">
       <div class="compass-dial" id="compassDial">
+        <span class="dial-label n">N</span>
+        <span class="dial-label e">E</span>
+        <span class="dial-label s">S</span>
+        <span class="dial-label w">W</span>
         <div class="target-dot"></div>
-        N
       </div>
       <div id="arrow">⬆</div>
     </div>
@@ -220,8 +260,8 @@
 <!-- ヘルプ モーダル -->
 <div id="helpModal" class="modal-overlay">
   <div class="modal-content">
-    <div class="modal-header"><span>📖 アプリ機能一覧（v2.7.0）</span><button class="close-btn" onclick="closeModal()">✕</button></div>
-    <p>1km、5km、10km、15km、20km、30km、40kmの広域半径描画に対応しました。</p>
+    <div class="modal-header"><span>📖 アプリ機能一覧（v2.8.0）</span><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <p>十字の東西南北コンパス表示に対応したバージョンです。</p>
   </div>
 </div>
 
@@ -238,7 +278,6 @@
   let toastTimeout = null, wakeLock = null, searchDebounceTimer = null;
   let currentSpeed = 0, currentAltitude = 0, arrivalThreshold = 10;
   
-  // 指定された半径オプション (0: OFF, 1000m: 1km, 5000m: 5km, 10000m: 10km, 15000m: 15km, 20000m: 20km, 30000m: 30km, 40000m: 40km)
   const RADIUS_OPTIONS = [0, 1000, 5000, 10000, 15000, 20000, 30000, 40000];
   let radiusIdx = 0;
 
