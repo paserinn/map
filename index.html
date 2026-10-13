@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>矢印ナビ - 地図選択＆検索対応</title>
+  <title>矢印ナビ - 現在地自動更新対応</title>
   <!-- Leaflet.js (無料地図ライブラリ) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -32,9 +32,18 @@
       padding: 10px 16px; background-color: #007bff; color: white;
       border: none; border-radius: 6px; font-weight: bold; cursor: pointer;
     }
+    .map-container {
+      position: relative; width: 100%; margin-bottom: 15px;
+    }
     #map {
-      width: 100%; height: 220px; border-radius: 8px; margin-bottom: 15px;
+      width: 100%; height: 220px; border-radius: 8px;
       border: 1px solid #333;
+    }
+    .locate-btn {
+      position: absolute; bottom: 10px; right: 10px; z-index: 1000;
+      background: #222; color: #fff; border: 1px solid #555;
+      padding: 6px 12px; border-radius: 20px; font-size: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.5);
     }
     .info-card {
       background: #1e1e1e; width: 100%; padding: 15px; border-radius: 8px;
@@ -60,8 +69,11 @@
     <button onclick="searchLocation()">検索</button>
   </div>
 
-  <!-- タップで目的地を選べる地図 -->
-  <div id="map"></div>
+  <!-- 地図エリア -->
+  <div class="map-container">
+    <div id="map"></div>
+    <button class="locate-btn" onclick="recenterToCurrentLocation()">📍 現在地へ移動</button>
+  </div>
 
   <!-- ナビゲーション表示部 -->
   <div class="info-card">
@@ -82,10 +94,11 @@
   let currentLng = null;
   let currentHeading = 0;
   let map, targetMarker, currentMarker;
+  let hasInitialCentered = false;
 
-  // 初期化：マップの生成（デフォルト表示位置：立川付近）
+  // 初期化：マップの生成
   window.onload = function() {
-    map = L.map('map').setView([35.699, 139.413], 13);
+    map = L.map('map').setView([35.6895, 139.6917], 13);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap'
     }).addTo(map);
@@ -96,7 +109,7 @@
     });
   };
 
-  // 目的地をセットする共通処理
+  // 目的地をセット
   function setTarget(lat, lng, label) {
     targetLat = lat;
     targetLng = lng;
@@ -108,7 +121,7 @@
     updateUI();
   }
 
-  // キーワードから緯度経度を検索（Nominatim API）
+  // 場所の検索
   function searchLocation() {
     const query = document.getElementById('keyword').value;
     if (!query) return;
@@ -127,6 +140,15 @@
         }
       })
       .catch(() => alert('検索中にエラーが発生しました。'));
+  }
+
+  // 現在地へ地図の中心を戻すボタンの処理
+  function recenterToCurrentLocation() {
+    if (currentLat !== null && currentLng !== null) {
+      map.setView([currentLat, currentLng], 16);
+    } else {
+      alert('現在地を取得中です。「位置・コンパスを開始」ボタンを押してください。');
+    }
   }
 
   // 2点間の距離計算
@@ -149,7 +171,7 @@
     return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
   }
 
-  // 表示更新
+  // UI更新
   function updateUI() {
     if (currentLat === null || currentLng === null || targetLat === null) return;
 
@@ -163,7 +185,7 @@
     document.getElementById('arrow').style.transform = `rotate(${arrowRotation}deg)`;
   }
 
-  // ナビゲーション開始（センサー起動）
+  // ナビゲーション開始
   function startNavigation() {
     // iOSコンパス許可
     if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
@@ -177,7 +199,7 @@
       window.addEventListener('deviceorientation', handleOrientation, true);
     }
 
-    // GPS起動
+    // GPSリアルタイム監視
     if ('geolocation' in navigator) {
       navigator.geolocation.watchPosition(
         (pos) => {
@@ -185,9 +207,20 @@
           currentLng = pos.coords.longitude;
           document.getElementById('status').innerText = 'GPS・コンパス稼働中';
 
-          // 現在地を地図上に青い円で更新表示
+          // 初回GPS取得時に現在地を中心へ移動
+          if (!hasInitialCentered) {
+            map.setView([currentLat, currentLng], 15);
+            hasInitialCentered = true;
+          }
+
+          // 現在地に青色のマーカーを更新描画
           if (currentMarker) map.removeLayer(currentMarker);
-          currentMarker = L.circleMarker([currentLat, currentLng], { color: '#007bff', radius: 8 }).addTo(map);
+          currentMarker = L.circleMarker([currentLat, currentLng], {
+            color: '#007bff',
+            fillColor: '#007bff',
+            fillOpacity: 0.8,
+            radius: 8
+          }).addTo(map);
 
           updateUI();
         },
