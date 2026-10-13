@@ -3,170 +3,206 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>矢印ナビ</title>
+  <title>矢印ナビ - 地図選択＆検索対応</title>
+  <!-- Leaflet.js (無料地図ライブラリ) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
+    * { box-sizing: border-box; }
     body {
-      margin: 0;
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-      background-color: #121212;
-      color: #ffffff;
-      font-family: sans-serif;
+      margin: 0; padding: 0;
+      background-color: #121212; color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex; flex-direction: column; align-items: center;
+      min-height: 100vh;
     }
     .container {
-      text-align: center;
-      width: 90%;
-      max-width: 400px;
+      width: 100%; max-width: 480px; padding: 15px;
+      display: flex; flex-direction: column; align-items: center;
     }
-    .input-group {
-      margin-bottom: 20px;
+    h2 { margin: 10px 0; font-size: 20px; }
+    .search-box {
+      width: 100%; display: flex; gap: 8px; margin-bottom: 10px;
     }
-    input {
-      width: 40%;
-      padding: 8px;
-      margin: 4px;
-      border-radius: 4px;
-      border: 1px solid #444;
-      background: #222;
-      color: #fff;
+    input[type="text"] {
+      flex: 1; padding: 10px; border-radius: 6px;
+      border: 1px solid #444; background: #222; color: #fff; font-size: 14px;
     }
     button {
-      padding: 10px 20px;
-      background-color: #007bff;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
+      padding: 10px 16px; background-color: #007bff; color: white;
+      border: none; border-radius: 6px; font-weight: bold; cursor: pointer;
     }
+    #map {
+      width: 100%; height: 220px; border-radius: 8px; margin-bottom: 15px;
+      border: 1px solid #333;
+    }
+    .info-card {
+      background: #1e1e1e; width: 100%; padding: 15px; border-radius: 8px;
+      text-align: center; margin-bottom: 10px;
+    }
+    #targetName { font-size: 14px; color: #4dabf7; margin-bottom: 5px; }
     #arrow {
-      font-size: 150px;
-      line-height: 1;
-      margin: 30px 0;
-      transition: transform 0.2s ease-out;
-      display: inline-block;
+      font-size: 120px; line-height: 1; margin: 15px 0;
+      transition: transform 0.1s linear; display: inline-block;
     }
-    #distance {
-      font-size: 32px;
-      font-weight: bold;
-    }
-    #status {
-      margin-top: 15px;
-      font-size: 14px;
-      color: #aaa;
-    }
+    #distance { font-size: 36px; font-weight: bold; color: #20c997; }
+    #status { font-size: 12px; color: #888; margin-top: 10px; }
   </style>
 </head>
 <body>
 
 <div class="container">
   <h2>矢印ナビ</h2>
-  <div class="input-group">
-    <input type="number" id="targetLat" step="any" placeholder="目的地 緯度">
-    <input type="number" id="targetLng" step="any" placeholder="目的地 経度">
-    <br><br>
-    <button onclick="startNavigation()">ナビ開始</button>
+
+  <!-- 検索フォーム -->
+  <div class="search-box">
+    <input type="text" id="keyword" placeholder="場所や住所を検索（例: 立川駅）">
+    <button onclick="searchLocation()">検索</button>
   </div>
 
-  <div id="arrow">⬆</div>
-  <div id="distance">0 m</div>
-  <div id="status">位置情報とコンパスを許可してください</div>
+  <!-- タップで目的地を選べる地図 -->
+  <div id="map"></div>
+
+  <!-- ナビゲーション表示部 -->
+  <div class="info-card">
+    <div id="targetName">地図をタップするか検索して目的地をセット</div>
+    <div id="distance">-- m</div>
+    <div id="arrow">⬆</div>
+    <button onclick="startNavigation()" style="width: 100%; margin-top: 10px; background-color: #28a745;">
+      位置・コンパスを開始
+    </button>
+    <div id="status">ボタンを押して各種センサーを有効化してください</div>
+  </div>
 </div>
 
 <script>
-  let targetLat = 0;
-  let targetLng = 0;
+  let targetLat = null;
+  let targetLng = null;
   let currentLat = null;
   let currentLng = null;
-  let currentHeading = 0; // デバイスの向いている方位（度）
+  let currentHeading = 0;
+  let map, targetMarker, currentMarker;
 
-  // 2点間の距離（Haversineの公式）
+  // 初期化：マップの生成（デフォルト表示位置：立川付近）
+  window.onload = function() {
+    map = L.map('map').setView([35.699, 139.413], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    // 地図タップで目的地をセット
+    map.on('click', function(e) {
+      setTarget(e.latlng.lat, e.latlng.lng, 'タップした位置');
+    });
+  };
+
+  // 目的地をセットする共通処理
+  function setTarget(lat, lng, label) {
+    targetLat = lat;
+    targetLng = lng;
+    document.getElementById('targetName').innerText = `目的地: ${label}`;
+
+    if (targetMarker) map.removeLayer(targetMarker);
+    targetMarker = L.marker([lat, lng]).addTo(map).bindPopup(label).openPopup();
+
+    updateUI();
+  }
+
+  // キーワードから緯度経度を検索（Nominatim API）
+  function searchLocation() {
+    const query = document.getElementById('keyword').value;
+    if (!query) return;
+
+    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.length > 0) {
+          const result = data[0];
+          const lat = parseFloat(result.lat);
+          const lon = parseFloat(result.lon);
+          map.setView([lat, lon], 15);
+          setTarget(lat, lon, result.display_name.split(',')[0]);
+        } else {
+          alert('見つかりませんでした。別のキーワードで試してください。');
+        }
+      })
+      .catch(() => alert('検索中にエラーが発生しました。'));
+  }
+
+  // 2点間の距離計算
   function calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371000; // 地球の半径 (m)
+    const R = 6371000;
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
     const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
               Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
               Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
+    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
   }
 
-  // 現在地から目的地への方位角を計算（真北基準: 0〜360度）
+  // 方位角計算
   function calculateBearing(lat1, lon1, lat2, lon2) {
-    const φ1 = lat1 * Math.PI / 180;
-    const φ2 = lat2 * Math.PI / 180;
+    const φ1 = lat1 * Math.PI / 180, φ2 = lat2 * Math.PI / 180;
     const Δλ = (lon2 - lon1) * Math.PI / 180;
-
     const y = Math.sin(Δλ) * Math.cos(φ2);
-    const x = Math.cos(φ1) * Math.sin(φ2) -
-              Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
-    const θ = Math.atan2(y, x);
-    return (θ * 180 / Math.PI + 360) % 360;
+    const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
   }
 
-  // 画面の矢印と距離を更新
+  // 表示更新
   function updateUI() {
-    if (currentLat === null || currentLng === null || targetLat === 0) return;
+    if (currentLat === null || currentLng === null || targetLat === null) return;
 
-    // 距離計算
     const dist = calculateDistance(currentLat, currentLng, targetLat, targetLng);
     document.getElementById('distance').innerText = dist >= 1000 
       ? (dist / 1000).toFixed(2) + ' km' 
       : Math.round(dist) + ' m';
 
-    // 目的地方位とデバイス向きから矢印の回転角度を計算
     const targetBearing = calculateBearing(currentLat, currentLng, targetLat, targetLng);
     const arrowRotation = targetBearing - currentHeading;
-
     document.getElementById('arrow').style.transform = `rotate(${arrowRotation}deg)`;
   }
 
-  // ナビゲーション開始
+  // ナビゲーション開始（センサー起動）
   function startNavigation() {
-    targetLat = parseFloat(document.getElementById('targetLat').value);
-    targetLng = parseFloat(document.getElementById('targetLng').value);
-
-    if (isNaN(targetLat) || isNaN(targetLng)) {
-      alert('正しい緯度と経度を入力してください。');
-      return;
+    // iOSコンパス許可
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      DeviceOrientationEvent.requestPermission().then(response => {
+        if (response === 'granted') {
+          window.addEventListener('deviceorientation', handleOrientation, true);
+        }
+      });
+    } else {
+      window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+      window.addEventListener('deviceorientation', handleOrientation, true);
     }
 
-    // GPS取得設定
+    // GPS起動
     if ('geolocation' in navigator) {
       navigator.geolocation.watchPosition(
-        (position) => {
-          currentLat = position.coords.latitude;
-          currentLng = position.coords.longitude;
-          document.getElementById('status').innerText = '位置情報更新中';
+        (pos) => {
+          currentLat = pos.coords.latitude;
+          currentLng = pos.coords.longitude;
+          document.getElementById('status').innerText = 'GPS・コンパス稼働中';
+
+          // 現在地を地図上に青い円で更新表示
+          if (currentMarker) map.removeLayer(currentMarker);
+          currentMarker = L.circleMarker([currentLat, currentLng], { color: '#007bff', radius: 8 }).addTo(map);
+
           updateUI();
         },
-        (error) => {
-          document.getElementById('status').innerText = 'GPSエラー: ' + error.message;
-        },
+        (err) => { document.getElementById('status').innerText = 'GPSエラー: ' + err.message; },
         { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
       );
-    } else {
-      alert('お使いの端末はGPSに対応していません。');
-    }
-
-    // コンパス（デバイスの向き）取得設定
-    if (window.DeviceOrientationEvent) {
-      window.addEventListener('deviceorientation absolute', handleOrientation, true);
-      window.addEventListener('deviceorientation', handleOrientation, true);
     }
   }
 
-  function handleOrientation(event) {
-    if (event.webkitCompassHeading) {
-      // iOS向けコンパス方位
-      currentHeading = event.webkitCompassHeading;
-    } else if (event.alpha !== null) {
-      // Android向けコンパス方位 (絶対値取得)
-      currentHeading = 360 - event.alpha;
+  // コンパス方位の受取
+  function handleOrientation(e) {
+    if (e.webkitCompassHeading) {
+      currentHeading = e.webkitCompassHeading;
+    } else if (e.alpha !== null) {
+      currentHeading = 360 - e.alpha;
     }
     updateUI();
   }
