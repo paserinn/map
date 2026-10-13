@@ -2,8 +2,8 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>矢印ナビ - 高機能フル装備版</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>矢印ナビ - PWA＆音声通知対応</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
@@ -50,12 +50,12 @@
       font-size: 130px; line-height: 1; margin: 10px 0; transition: transform 0.1s linear, color 0.3s; display: inline-block; color: #007bff;
     }
     #distance { font-size: 36px; font-weight: bold; color: #20c997; }
-    #stepsCount { font-size: 14px; color: #aaa; margin-top: -5px; margin-bottom: 10px; }
+    #etaDetails { font-size: 13px; color: #aaa; margin-top: -5px; margin-bottom: 10px; }
     .btn-group {
-      display: flex; gap: 8px; margin-top: 10px; width: 100%;
+      display: flex; gap: 6px; margin-top: 10px; width: 100%;
     }
     .sub-btn {
-      flex: 1; padding: 8px; font-size: 12px; background: #333; border: 1px solid #555; border-radius: 6px; color: #fff;
+      flex: 1; padding: 8px 4px; font-size: 11px; background: #333; border: 1px solid #555; border-radius: 6px; color: #fff;
     }
     .start-btn {
       width: 100%; margin-top: 10px; padding: 14px; background-color: #28a745; font-size: 16px; border-radius: 8px;
@@ -67,7 +67,7 @@
 
 <div class="container">
   <div class="header-bar">
-    <span class="version-tag">v1.2.0</span>
+    <span class="version-tag">v1.3.0</span>
     <h2>矢印ナビ</h2>
     <span style="width: 45px;"></span>
   </div>
@@ -85,12 +85,13 @@
   <div class="info-card">
     <div id="targetName">地図をタップするか検索して目的地をセット</div>
     <div id="distance">-- m</div>
-    <div id="stepsCount">（約 -- 歩）</div>
+    <div id="etaDetails">徒歩 約 -- 分（約 -- 歩）</div>
     <div id="arrow">⬆</div>
     
     <div class="btn-group">
-      <button class="sub-btn" onclick="toggleArrowColor()">🎨 矢印カラー切替</button>
-      <button class="sub-btn" onclick="saveFavorite()">⭐ 目的地をお気に入り保存</button>
+      <button class="sub-btn" onclick="toggleArrowColor()">🎨 色変更</button>
+      <button class="sub-btn" onclick="toggleSpeech()">🔊 音声案内: <span id="speechStatus">ON</span></button>
+      <button class="sub-btn" onclick="shareLocation()">🔗 共有</button>
     </div>
 
     <button id="startBtn" class="start-btn" onclick="startNavigation()">
@@ -109,6 +110,9 @@
   let autoCompassOffset = 0;
   let map, targetMarker, currentMarker;
   let isNavigating = false;
+  let enableSpeech = true;
+  let announced50m = false;
+  let announced100m = false;
   let hasVibratedForArrival = false;
 
   const JAPAN_MAGNETIC_DECLINATION = 7.5;
@@ -128,6 +132,31 @@
     fetchInitialLocationFast();
   };
 
+  function speakText(text) {
+    if (!enableSpeech || !('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const uttr = new SpeechSynthesisUtterance(text);
+    uttr.lang = 'ja-JP';
+    window.speechSynthesis.speak(uttr);
+  }
+
+  function toggleSpeech() {
+    enableSpeech = !enableSpeech;
+    document.getElementById('speechStatus').innerText = enableSpeech ? 'ON' : 'OFF';
+  }
+
+  function shareLocation() {
+    if (currentLat === null || currentLng === null) {
+      alert('現在地を取得後に共有可能です。');
+      return;
+    }
+    const url = `https://maps.google.com/?q=${currentLat},${currentLng}`;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(url);
+      alert('現在地のGoogle Mapsリンクをコピーしました。LINE等に送信できます。');
+    }
+  }
+
   function fetchInitialLocationFast() {
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition((pos) => {
@@ -141,6 +170,7 @@
   function setTarget(lat, lng, label) {
     targetLat = lat; targetLng = lng;
     hasVibratedForArrival = false;
+    announced50m = false; announced100m = false;
     document.getElementById('targetName').innerText = `目的地: ${label}`;
     if (targetMarker) map.removeLayer(targetMarker);
     targetMarker = L.marker([lat, lng]).addTo(map).bindPopup(label).openPopup();
@@ -197,17 +227,6 @@
     document.getElementById('arrow').style.color = ARROW_COLORS[colorIndex];
   }
 
-  function saveFavorite() {
-    if (targetLat === null || targetLng === null) {
-      alert('保存する目的地をセットしてください。');
-      return;
-    }
-    const name = prompt('この場所の保存名を入力してください:', document.getElementById('targetName').innerText.replace('目的地: ', ''));
-    if (name) {
-      alert(`「${name}」をお気に入り登録しました。`);
-    }
-  }
-
   function calculateDistance(lat1, lon1, lat2, lon2) {
     const R = 6371000;
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -234,17 +253,25 @@
       ? (dist / 1000).toFixed(2) + ' km' 
       : Math.round(dist) + ' m';
 
-    // 歩数計算（1歩約0.7m換算）
+    // 歩数・想定時間計算（分速80m換算）
     const steps = Math.round(dist / 0.7);
-    document.getElementById('stepsCount').innerText = `（約 ${steps.toLocaleString()} 歩）`;
+    const walkMinutes = Math.max(1, Math.round(dist / 67));
+    document.getElementById('etaDetails').innerText = `徒歩 約 ${walkMinutes} 分（約 ${steps.toLocaleString()} 歩）`;
 
-    // 到着時バイブレーション（10m以内）
-    if (dist <= 10 && !hasVibratedForArrival && isNavigating) {
-      if ('vibrate' in navigator) {
-        navigator.vibrate([200, 100, 200, 100, 400]); // 到着パルス振動
+    // 音声告知＆到達判定
+    if (isNavigating) {
+      if (dist <= 100 && dist > 50 && !announced100m) {
+        speakText('目的地まで、およそ100メートルです');
+        announced100m = true;
+      } else if (dist <= 50 && dist > 10 && !announced50m) {
+        speakText('まもなく、目的地付近です');
+        announced50m = true;
+      } else if (dist <= 10 && !hasVibratedForArrival) {
+        if ('vibrate' in navigator) navigator.vibrate([200, 100, 200, 100, 400]);
+        speakText('目的地付近に到着しました。ナビを完了します');
+        hasVibratedForArrival = true;
+        document.getElementById('status').innerText = '🎉 目的地付近に到着しました！';
       }
-      hasVibratedForArrival = true;
-      document.getElementById('status').innerText = '🎉 目的地付近に到着しました！';
     }
 
     let finalHeading = (smoothedHeading + autoCompassOffset) % 360;
@@ -261,6 +288,7 @@
     }
 
     isNavigating = true;
+    speakText('ナビゲーションを開始します');
     document.getElementById('startBtn').innerText = 'ナビゲーション中...';
     document.getElementById('startBtn').style.backgroundColor = '#17a2b8';
 
