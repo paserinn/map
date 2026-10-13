@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>矢印ナビ - v2.4.0 高精度・候補検索・上部トースト版</title>
+  <title>矢印ナビ - v2.5.0 最短角度補正・回転ブレ修正版</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -32,7 +32,6 @@
     }
     h2 { margin: 0; font-size: 16px; }
     
-    /* 検索ボックスと候補ドロップダウン */
     .search-box-container { width: 100%; position: relative; margin-bottom: 6px; }
     .search-box { width: 100%; display: flex; gap: 4px; }
     input[type="text"] {
@@ -85,7 +84,7 @@
       position: absolute; width: 8px; height: 8px; background: #ff4757; border-radius: 50%; top: 4px; left: 61px;
     }
     #arrow {
-      font-size: 100px; line-height: 1; transition: transform 0.08s linear, color 0.3s; display: inline-block; color: #007bff; z-index: 2;
+      font-size: 100px; line-height: 1; transition: transform 0.1s cubic-bezier(0.25, 0.1, 0.25, 1), color 0.3s; display: inline-block; color: #007bff; z-index: 2;
     }
     
     #distance { font-size: 28px; font-weight: bold; color: #20c997; }
@@ -104,7 +103,6 @@
     #navTimer { font-size: 10px; color: #20c997; margin-top: 2px; }
     #status { font-size: 10px; color: #888; margin-top: 4px; }
 
-    /* ★画面上部からふわっと降りるトースト表示★ */
     .toast-container { position: fixed; top: 15px; left: 50%; transform: translateX(-50%); z-index: 3500; pointer-events: none; }
     .toast {
       background: rgba(30, 30, 30, 0.95); color: #fff; border: 1px solid #007bff;
@@ -128,7 +126,7 @@
 
 <div class="container" id="mainApp">
   <div class="header-bar" id="headerArea">
-    <span class="version-tag">v2.4.0</span>
+    <span class="version-tag">v2.5.0</span>
     <h2>矢印ナビ</h2>
     <div>
       <button class="help-btn" onclick="openSosModal()" style="background:#d9534f; border:none;">🚨 SOS</button>
@@ -142,7 +140,6 @@
       <input type="text" id="keyword" placeholder="場所や住所を検索（例: 立川駅）" oninput="handleSearchInput(this.value)">
       <button onclick="searchLocation()">検索</button>
     </div>
-    <!-- 検索入力候補表示エリア -->
     <div id="suggestions" class="suggestions-list"></div>
   </div>
 
@@ -222,8 +219,8 @@
 <!-- ヘルプ モーダル -->
 <div id="helpModal" class="modal-overlay">
   <div class="modal-content">
-    <div class="modal-header"><span>📖 アプリ機能一覧（v2.4.0）</span><button class="close-btn" onclick="closeModal()">✕</button></div>
-    <p>高精度センサリング、上部トースト通知、候補検索機能を全搭載した統合版です。</p>
+    <div class="modal-header"><span>📖 アプリ機能一覧（v2.5.0）</span><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <p>180度境界での回転飛びを抑止した安定コンパスナビです。</p>
   </div>
 </div>
 
@@ -240,9 +237,11 @@
   let toastTimeout = null, wakeLock = null, searchDebounceTimer = null;
   let currentSpeed = 0, currentAltitude = 0, arrivalThreshold = 10;
   
-  // GPSノイズ軽減用バッファ
+  // 旋回補正用（直前の旋回累積角度）
+  let currentDisplayArrowRotation = 0;
+  let currentDisplayNorthRotation = 0;
+  
   let gpsHistory = [];
-
   const JAPAN_MAGNETIC_DECLINATION = 7.5;
   const MODES = [
     { name: '徒歩', speedMin: 67, stepLen: 0.7 },
@@ -304,7 +303,6 @@
     if (!navigator.onLine) showToast('⚠️ オフライン状態です');
   }
 
-  // ★上部トースト表示機能★
   function showToast(msg) {
     const toast = document.getElementById('toast');
     if (!toast) return;
@@ -314,7 +312,6 @@
     toastTimeout = setTimeout(() => toast.classList.remove('show'), 2200);
   }
 
-  // ★リアルタイム検索候補出力★
   function handleSearchInput(val) {
     if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
     const box = document.getElementById('suggestions');
@@ -516,7 +513,6 @@
     }
   }
 
-  // ★GPS高精度移動平均フィルタ★
   function applyFilteredGPS(lat, lng) {
     gpsHistory.push({ lat, lng });
     if (gpsHistory.length > 3) gpsHistory.shift();
@@ -598,6 +594,12 @@
     return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
   }
 
+  // ★180度境界グルン飛び防止アルゴリズム★
+  function getShortestRotation(currentDeg, targetDeg) {
+    let diff = (targetDeg - (currentDeg % 360) + 540) % 360 - 180;
+    return currentDeg + diff;
+  }
+
   function updateUI() {
     if (currentLat === null || targetLat === null) return;
 
@@ -627,11 +629,15 @@
 
     let finalHeading = (smoothedHeading + autoCompassOffset + manualOffset + flip180Offset) % 360;
     const targetBearing = calculateBearing(currentLat, currentLng, targetLat, targetLng);
-    let arrowRotation = targetBearing - finalHeading;
+    let targetArrowDeg = (targetBearing - finalHeading + 360) % 360;
 
-    document.getElementById('northNeedle').style.transform = `rotate(${-finalHeading}deg)`;
-    document.getElementById('compassDial').style.transform = `rotate(${-finalHeading}deg)`;
-    arrowElem.style.transform = `rotate(${arrowRotation}deg)`;
+    // 旋回計算（不連続点のジャンプを防ぎ、最も近い最短方向へスムーズ旋回）
+    currentDisplayArrowRotation = getShortestRotation(currentDisplayArrowRotation, targetArrowDeg);
+    currentDisplayNorthRotation = getShortestRotation(currentDisplayNorthRotation, -finalHeading);
+
+    document.getElementById('northNeedle').style.transform = `rotate(${currentDisplayNorthRotation}deg)`;
+    document.getElementById('compassDial').style.transform = `rotate(${currentDisplayNorthRotation}deg)`;
+    arrowElem.style.transform = `rotate(${currentDisplayArrowRotation}deg)`;
 
     if (isNavigating && !isPaused) {
       if (dist <= 100 && dist > 50 && !announced100m) {
@@ -726,7 +732,6 @@
     document.getElementById('navTimer').innerText = `経過時間: ${m}:${s}`;
   }
 
-  // ★ジャイロコンパス補正フィルタ★
   function handleGalaxyOrientation(e) {
     let heading = null;
     if (e.alpha !== null && e.alpha !== undefined) heading = 360 - e.alpha;
@@ -736,12 +741,9 @@
       if (heading < 0) heading += 360;
 
       rawHeading = heading;
-      let diff = rawHeading - smoothedHeading;
-      if (diff > 180) diff -= 360;
-      if (diff < -180) diff += 360;
+      let diff = (rawHeading - smoothedHeading + 540) % 360 - 180;
       
-      // 平滑化係数を0.15に調整して滑らかな旋回をサポート
-      smoothedHeading = (smoothedHeading + diff * 0.15) % 360;
+      smoothedHeading = (smoothedHeading + diff * 0.18) % 360;
       if (smoothedHeading < 0) smoothedHeading += 360;
 
       updateUI();
@@ -751,4 +753,3 @@
 
 </body>
 </html>
-
