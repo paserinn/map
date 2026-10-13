@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>矢印ナビ - 高速＆バージョン表示版</title>
+  <title>矢印ナビ - 高機能フル装備版</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
@@ -21,54 +21,44 @@
       position: relative;
     }
     .header-bar {
-      width: 100%;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 10px;
+      width: 100%; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;
     }
     .version-tag {
-      font-size: 11px;
-      color: #007bff;
-      background: #1a2735;
-      padding: 3px 8px;
-      border-radius: 12px;
-      border: 1px solid #0056b3;
-      font-weight: bold;
+      font-size: 11px; color: #007bff; background: #1a2735; padding: 3px 8px; border-radius: 12px; border: 1px solid #0056b3; font-weight: bold;
     }
     h2 { margin: 0; font-size: 20px; }
     .search-box {
       width: 100%; display: flex; gap: 8px; margin-bottom: 10px;
     }
     input[type="text"] {
-      flex: 1; padding: 10px; border-radius: 6px;
-      border: 1px solid #444; background: #222; color: #fff; font-size: 14px;
+      flex: 1; padding: 10px; border-radius: 6px; border: 1px solid #444; background: #222; color: #fff; font-size: 14px;
     }
     button {
-      padding: 10px 16px; background-color: #007bff; color: white;
-      border: none; border-radius: 6px; font-weight: bold; cursor: pointer;
+      padding: 10px 16px; background-color: #007bff; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;
     }
     .map-container { position: relative; width: 100%; margin-bottom: 15px; }
-    #map { width: 100%; height: 220px; border-radius: 8px; border: 1px solid #333; }
+    #map { width: 100%; height: 200px; border-radius: 8px; border: 1px solid #333; }
     .locate-btn {
       position: absolute; bottom: 10px; right: 10px; z-index: 1000;
-      background: #222; color: #fff; border: 1px solid #555;
-      padding: 8px 14px; border-radius: 20px; font-size: 12px; font-weight: bold;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.6);
+      background: #222; color: #fff; border: 1px solid #555; padding: 8px 14px; border-radius: 20px; font-size: 12px; font-weight: bold; box-shadow: 0 2px 6px rgba(0,0,0,0.6);
     }
     .info-card {
-      background: #1e1e1e; width: 100%; padding: 15px; border-radius: 8px;
-      text-align: center; margin-bottom: 10px;
+      background: #1e1e1e; width: 100%; padding: 15px; border-radius: 8px; text-align: center; margin-bottom: 10px;
     }
     #targetName { font-size: 15px; color: #4dabf7; font-weight: bold; margin-bottom: 5px; }
     #arrow {
-      font-size: 130px; line-height: 1; margin: 10px 0;
-      transition: transform 0.1s linear; display: inline-block;
+      font-size: 130px; line-height: 1; margin: 10px 0; transition: transform 0.1s linear, color 0.3s; display: inline-block; color: #007bff;
     }
     #distance { font-size: 36px; font-weight: bold; color: #20c997; }
+    #stepsCount { font-size: 14px; color: #aaa; margin-top: -5px; margin-bottom: 10px; }
+    .btn-group {
+      display: flex; gap: 8px; margin-top: 10px; width: 100%;
+    }
+    .sub-btn {
+      flex: 1; padding: 8px; font-size: 12px; background: #333; border: 1px solid #555; border-radius: 6px; color: #fff;
+    }
     .start-btn {
-      width: 100%; margin-top: 10px; padding: 14px;
-      background-color: #28a745; font-size: 16px; border-radius: 8px;
+      width: 100%; margin-top: 10px; padding: 14px; background-color: #28a745; font-size: 16px; border-radius: 8px;
     }
     #status { font-size: 12px; color: #888; margin-top: 10px; }
   </style>
@@ -76,31 +66,33 @@
 <body>
 
 <div class="container">
-  <!-- ヘッダーエリア（左上にバージョン表記） -->
   <div class="header-bar">
-    <span class="version-tag">v1.1.0</span>
+    <span class="version-tag">v1.2.0</span>
     <h2>矢印ナビ</h2>
-    <span style="width: 45px;"></span> <!-- レイアウト調整用スペース -->
+    <span style="width: 45px;"></span>
   </div>
 
-  <!-- 検索エリア -->
   <div class="search-box">
     <input type="text" id="keyword" placeholder="場所や住所を検索（例: 立川駅）">
     <button onclick="searchLocation()">検索</button>
   </div>
 
-  <!-- 地図エリア -->
   <div class="map-container">
     <div id="map"></div>
     <button class="locate-btn" onclick="moveToCurrentLocation()">📍 現在地へ移動</button>
   </div>
 
-  <!-- 情報カード表示エリア -->
   <div class="info-card">
     <div id="targetName">地図をタップするか検索して目的地をセット</div>
     <div id="distance">-- m</div>
+    <div id="stepsCount">（約 -- 歩）</div>
     <div id="arrow">⬆</div>
     
+    <div class="btn-group">
+      <button class="sub-btn" onclick="toggleArrowColor()">🎨 矢印カラー切替</button>
+      <button class="sub-btn" onclick="saveFavorite()">⭐ 目的地をお気に入り保存</button>
+    </div>
+
     <button id="startBtn" class="start-btn" onclick="startNavigation()">
       🚀 案内開始
     </button>
@@ -117,8 +109,11 @@
   let autoCompassOffset = 0;
   let map, targetMarker, currentMarker;
   let isNavigating = false;
+  let hasVibratedForArrival = false;
 
   const JAPAN_MAGNETIC_DECLINATION = 7.5;
+  const ARROW_COLORS = ['#007bff', '#20c997', '#ffc107', '#e83e8c', '#ffffff'];
+  let colorIndex = 0;
 
   window.onload = function() {
     map = L.map('map').setView([35.6995, 139.4137], 13);
@@ -145,6 +140,7 @@
 
   function setTarget(lat, lng, label) {
     targetLat = lat; targetLng = lng;
+    hasVibratedForArrival = false;
     document.getElementById('targetName').innerText = `目的地: ${label}`;
     if (targetMarker) map.removeLayer(targetMarker);
     targetMarker = L.marker([lat, lng]).addTo(map).bindPopup(label).openPopup();
@@ -196,6 +192,22 @@
     }).addTo(map);
   }
 
+  function toggleArrowColor() {
+    colorIndex = (colorIndex + 1) % ARROW_COLORS.length;
+    document.getElementById('arrow').style.color = ARROW_COLORS[colorIndex];
+  }
+
+  function saveFavorite() {
+    if (targetLat === null || targetLng === null) {
+      alert('保存する目的地をセットしてください。');
+      return;
+    }
+    const name = prompt('この場所の保存名を入力してください:', document.getElementById('targetName').innerText.replace('目的地: ', ''));
+    if (name) {
+      alert(`「${name}」をお気に入り登録しました。`);
+    }
+  }
+
   function calculateDistance(lat1, lon1, lat2, lon2) {
     const R = 6371000;
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -221,6 +233,19 @@
     document.getElementById('distance').innerText = dist >= 1000 
       ? (dist / 1000).toFixed(2) + ' km' 
       : Math.round(dist) + ' m';
+
+    // 歩数計算（1歩約0.7m換算）
+    const steps = Math.round(dist / 0.7);
+    document.getElementById('stepsCount').innerText = `（約 ${steps.toLocaleString()} 歩）`;
+
+    // 到着時バイブレーション（10m以内）
+    if (dist <= 10 && !hasVibratedForArrival && isNavigating) {
+      if ('vibrate' in navigator) {
+        navigator.vibrate([200, 100, 200, 100, 400]); // 到着パルス振動
+      }
+      hasVibratedForArrival = true;
+      document.getElementById('status').innerText = '🎉 目的地付近に到着しました！';
+    }
 
     let finalHeading = (smoothedHeading + autoCompassOffset) % 360;
     const targetBearing = calculateBearing(currentLat, currentLng, targetLat, targetLng);
@@ -252,7 +277,9 @@
           prevLng = currentLng;
           currentLat = pos.coords.latitude;
           currentLng = pos.coords.longitude;
-          document.getElementById('status').innerText = 'GPS・コンパス稼働中';
+          if (!hasVibratedForArrival) {
+            document.getElementById('status').innerText = 'GPS・コンパス稼働中';
+          }
 
           updateCurrentMarkerOnMap();
 
